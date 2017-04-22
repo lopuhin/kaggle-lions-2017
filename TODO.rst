@@ -1,4 +1,4 @@
-- validation, accuracy, checkpointing, logs, etc.
+- validation, accuracy
 - visualize detector predictions
 - image scale - how much does it vary? how to estimate it?
   just label and add scale as output to a network?
@@ -13,8 +13,7 @@ dumb baseline:
 - ???
 - detector that works for all classes
 - how to separate close entries - should be solved?
-- check detection models again
-
+- check SOTA detection models again
 
 later:
 - check quality of coordinates carefully on all images
