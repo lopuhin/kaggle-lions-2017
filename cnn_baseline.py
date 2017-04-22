@@ -28,6 +28,7 @@ class PatchDataset(Dataset):
                  transform,
                  neg_ratio: float=1,
                  size: int=96,
+                 deterministic=False,
                  ):
         self.img_ids = [
             int(p.name.split('.')[0]) for p in img_paths]
@@ -38,26 +39,34 @@ class PatchDataset(Dataset):
         assert size % 2 == 0
         self.size = size
         self.transform = transform
+        self.deterministic = deterministic
 
     def __getitem__(self, idx):
         r = self.size // 2
-        # TODO: augmentations: rotation, small shift, flip
+        if self.deterministic:
+            random.seed(idx)
         if idx < len(self.coords):  # positive
             item = self.coords.iloc[idx]
             y, x = item.row, item.col
+            shift = 16
+            y += random.randint(-shift, shift)
+            x += random.randint(-shift, shift)
             target = int(item.cls)
             img = self.imgs[item.name]
             max_y, max_x = img.shape[:2]
-            # FIXME - something more proper?
             x, y = max(r, min(x, max_x - r)), max(r, min(y, max_y - r))
         else:  # negative
             img = random.choice(list(self.imgs.values()))
             target = N_CLASSES
             max_y, max_x = img.shape[:2]
-            # FIXME - can accidentally be close to positive class
+            # can accidentally be close to a positive class
             x, y = (random.randint(r, max_x - r),
                     random.randint(r, max_y - r))
+        # TODO: rotations
         patch = img[y - r: y + r, x - r: x + r]
+        if random.random() < 0.5:
+           patch = np.flip(patch, axis=1).copy()
+        assert patch.shape == (self.size, self.size, 3), patch.shape
         return self.transform(patch), target
 
     def __len__(self):
@@ -137,12 +146,14 @@ def validation(model: nn.Module, criterion, valid_loader) -> Dict[str, float]:
     return {'valid_loss': valid_loss}
 
 
-def make_loader(args, paths: List[Path], coords: pd.DataFrame) -> DataLoader:
+def make_loader(args, paths: List[Path], coords: pd.DataFrame,
+                deterministic: bool=False) -> DataLoader:
     dataset = PatchDataset(
         img_paths=paths,
         coords=coords,
         size=args.patch_size,
         transform=ToTensor(),
+        deterministic=deterministic,
     )
     return DataLoader(
         dataset=dataset,
@@ -155,12 +166,12 @@ def make_loader(args, paths: List[Path], coords: pd.DataFrame) -> DataLoader:
 def train_valid_split(args):
     coords = pd.read_csv('./data/coords-threeplusone.csv', index_col=0)
     img_paths = np.array(list(Path('./data/Train/').glob('*.jpg')))
-    cv_split = ShuffleSplit(n_splits=args.n_folds)
+    cv_split = ShuffleSplit(n_splits=args.n_folds, random_state=42)
     img_folds = list(cv_split.split(img_paths))
     train_ids, valid_ids = img_folds[args.fold - 1]
     train_paths, valid_paths = img_paths[train_ids], img_paths[valid_ids]
     return (make_loader(args, train_paths, coords),
-            make_loader(args, valid_paths, coords))
+            make_loader(args, valid_paths, coords, deterministic=True))
 
 
 def main():
