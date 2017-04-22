@@ -1,8 +1,11 @@
-- validation, accuracy
+- train on full dataset
+- accuracy report, confusion matrix
+- augmentation (see TODO in code)
 - visualize detector predictions
 - image scale - how much does it vary? how to estimate it?
   just label and add scale as output to a network?
   but maybe it's not so important for other approaches, so it's fine to skip it?
+- train count prediction classifier
 
 dumb baseline:
 - predict on small patches

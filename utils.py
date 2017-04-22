@@ -7,9 +7,22 @@ from pprint import pprint
 
 import cv2
 import numpy as np
+import torch
+from torch.autograd import Variable
 
 
 N_CLASSES = 5
+
+
+cuda_is_available = torch.cuda.is_available()
+
+
+def variable(x, volatile=False):
+    return cuda(Variable(x, volatile=volatile))
+
+
+def cuda(x):
+    return x.cuda() if cuda_is_available else x
 
 
 def load_image(path: Path) -> np.ndarray:
