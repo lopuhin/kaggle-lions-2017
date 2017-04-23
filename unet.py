@@ -63,8 +63,8 @@ class SegmentationDataset(BaseDataset):
                      max(0, ix - self.mark_r): ix + self.mark_r] = item.cls
                 any_lions = True
         angle = random.random() * 360
-        patch = skimage.transform.rotate(patch, angle)
-        mask = skimage.transform.rotate(mask, angle)
+        patch = skimage.transform.rotate(patch, angle, preserve_range=True)
+        mask = skimage.transform.rotate(mask, angle, preserve_range=True)
         patch = patch[b:, b:][:s, :s]
         mask = mask[b:, b:][:s, :s]
         if random.random() < 0.5:

@@ -8,16 +8,18 @@ from typing import List
 
 import pandas as pd
 import numpy as np
+import skimage.io
 import skimage.transform
 import torch
 from torch import nn
 from torch.utils.data import DataLoader
 from torchvision.transforms import ToTensor, Normalize, Compose
+import torchvision.models
 import tqdm
 
 from utils import (
     N_CLASSES, variable, cuda, load_coords, train_valid_split,
-    train, validation, BaseDataset
+    train, validation, BaseDataset,
 )
 from models import BaselineCNN
 
@@ -31,6 +33,7 @@ class PatchDataset(BaseDataset):
                  size: int=96,
                  rotate: bool=True,
                  deterministic: bool=False,
+                 debug: bool=False,
                  ):
         super().__init__(img_paths, coords)
         self.neg_ratio = neg_ratio
@@ -39,6 +42,7 @@ class PatchDataset(BaseDataset):
         self.transform = transform
         self.rotate = rotate
         self.deterministic = deterministic
+        self.debug = debug
 
     def __getitem__(self, idx):
         r = self.size // 2
@@ -66,11 +70,13 @@ class PatchDataset(BaseDataset):
         patch = img[y - r: y + r, x - r: x + r]
         if self.rotate:
             angle = random.random() * 360
-            patch = skimage.transform.rotate(patch, angle)
+            patch = skimage.transform.rotate(patch, angle, preserve_range=True)
             b = int(r - self.size // 2)
             patch = patch[b:, b:][:self.size, :self.size]
         if random.random() < 0.5:
            patch = np.flip(patch, axis=1).copy()
+        if self.debug:
+            skimage.io.imsave('patch-{}.jpg'.format(target), patch)
         assert patch.shape == (self.size, self.size, 3), patch.shape
         return self.transform(patch), target
 
@@ -96,8 +102,7 @@ def make_loader(args, paths: List[Path], coords: pd.DataFrame,
                 deterministic: bool=False) -> DataLoader:
     transform = Compose([
         ToTensor(),
-        # TODO - check actual values
-        Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]),
+        Normalize(mean=[0.44, 0.46, 0.46], std=[0.16, 0.15, 0.15]),
     ])
     dataset = PatchDataset(
         img_paths=paths,
@@ -139,7 +144,9 @@ def main():
         make_loader(args, valid_paths, coords, deterministic=True))
 
     root = Path(args.root)
-    model = BaselineCNN(patch_size=args.patch_size)
+    # model = BaselineCNN(patch_size=args.patch_size)
+    model = torchvision.models.resnet18(num_classes=N_CLASSES + 1)
+    model.avgpool = nn.AvgPool2d(args.patch_size // 32)
     model = cuda(model)
     criterion = nn.CrossEntropyLoss()
     if args.mode == 'train':

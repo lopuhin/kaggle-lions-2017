@@ -110,13 +110,14 @@ def train(args, model: nn.Module, criterion, *, train_loader, valid_loader):
         model.train()
         tq = tqdm.tqdm(total=(args.epoch_size or
                               len(train_loader) * args.batch_size))
-        if args.epoch_size:
-            train_loader = islice(
-                train_loader, args.epoch_size // args.batch_size)
         tq.set_description('Epoch {}'.format(epoch))
         losses = []
+        tl = train_loader
+        if args.epoch_size:
+            tl = islice(tl, args.epoch_size // args.batch_size)
         try:
-            for i, (inputs, targets) in enumerate(train_loader):
+            mean_loss = 0
+            for i, (inputs, targets) in enumerate(tl):
                 inputs, targets = variable(inputs), variable(targets)
                 outputs = model(inputs)
                 outputs = outputs.view(outputs.size(0), -1)
@@ -132,6 +133,7 @@ def train(args, model: nn.Module, criterion, *, train_loader, valid_loader):
                 tq.set_postfix(loss=mean_loss)
                 if i and i % report_each == 0:
                     write_event(log, step, loss=mean_loss)
+            write_event(log, step, loss=mean_loss)
             tq.close()
             save(epoch + 1)
             valid_metrics = validation(model, criterion, valid_loader)
