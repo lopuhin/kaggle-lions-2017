@@ -11,6 +11,9 @@ dumb baseline:
 - determine image scale (maybe skip?)
 - estimate count based on the number of positive patches (or something like this)
 
+UNet:
+- predict big squares
+
 "proper" pipeline ideas:
 - ???
 - detector that works for all classes

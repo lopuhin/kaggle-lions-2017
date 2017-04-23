@@ -9,27 +9,31 @@ from typing import List
 import pandas as pd
 import numpy as np
 import skimage.transform
-import torch
+import skimage.io
 from torch import nn
-from torch.utils.data import Dataset, DataLoader
-from torchvision.transforms import ToTensor, Normalize, Compose
-import tqdm
+from torch.utils.data import DataLoader, Dataset
+from torchvision.transforms import Compose, ToTensor, Normalize
 
 from utils import (
-    N_CLASSES, load_image, variable, cuda, load_coords, train_valid_split,
-    train, validation,
+    N_CLASSES, load_image, cuda, load_coords,
+    train_valid_split, train, validation,
 )
-from models import BaselineCNN
 
 
-class PatchDataset(Dataset):
+class UNet(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.conv = nn.Conv2d(1, 1, 1)
+
+
+class SegmentationDataset(Dataset):
     def __init__(self,
                  img_paths: List[Path],
                  coords: pd.DataFrame,
                  transform,
-                 neg_ratio: float=1,
-                 size: int=96,
-                 rotate: bool=True,
+                 patch_size: int,
+                 mask_r: int=16,
+                 debug: bool=False,
                  deterministic: bool=False,
                  ):
         self.img_ids = [
@@ -37,63 +41,55 @@ class PatchDataset(Dataset):
         self.imgs = {img_id: load_image(p)
                      for img_id, p in zip(self.img_ids, img_paths)}
         self.coords = coords.loc[self.img_ids]
-        self.neg_ratio = neg_ratio
-        assert size % 2 == 0
-        self.size = size
+        self.patch_size = patch_size
+        self.mark_r = mask_r
         self.transform = transform
-        self.rotate = rotate
+        self.debug = debug
         self.deterministic = deterministic
+        self.to_tensor = ToTensor()
 
     def __getitem__(self, idx):
-        r = self.size // 2
-        if self.rotate:
-            r = int(np.ceil(r * np.sqrt(2)))
         if self.deterministic:
             random.seed(idx)
-        if idx < len(self.coords):  # positive
-            item = self.coords.iloc[idx]
-            y, x = item.row, item.col
-            shift = 16
-            y += random.randint(-shift, shift)
-            x += random.randint(-shift, shift)
-            target = int(item.cls)
-            img = self.imgs[item.name]
-            max_y, max_x = img.shape[:2]
-            x, y = max(r, min(x, max_x - r)), max(r, min(y, max_y - r))
-        else:  # negative
-            img = random.choice(list(self.imgs.values()))
-            target = N_CLASSES
-            max_y, max_x = img.shape[:2]
-            # can accidentally be close to a positive class
-            x, y = (random.randint(r, max_x - r),
-                    random.randint(r, max_y - r))
-        patch = img[y - r: y + r, x - r: x + r]
-        if self.rotate:
-            angle = random.random() * 360
-            patch = skimage.transform.rotate(patch, angle)
-            b = int(r - self.size // 2)
-            patch = patch[b:, b:][:self.size, :self.size]
+        img_id = self.img_ids[idx % len(self.img_ids)]
+        img = self.imgs[img_id]
+        max_y, max_x = img.shape[:2]
+        s = self.patch_size
+        b = int(np.ceil(np.sqrt(2) * s / 2))
+        x, y = (random.randint(b, max_x - (b + s)),
+                random.randint(b, max_y - (b + s)))
+        patch = img[y: y + 2 * b + s, x: x + 2 * b + s]
+        mask = np.zeros_like(patch, dtype=np.int32)
+        mask[:] = N_CLASSES
+        coords = self.coords.loc[img_id]
+        # TODO - check that this loop is not too slow
+        any_lions = False
+        for i in range(len(coords)):
+            item = coords.iloc[i]
+            ix, iy = item.col - x, item.row - y
+            if (0 >= ix <= 2 * b + s) and (0 >= iy <= 2 * b + s):
+                mask[max(0, iy - self.mark_r): iy + self.mark_r,
+                     max(0, ix - self.mark_r): ix + self.mark_r] = item.cls
+                any_lions = True
+        angle = random.random() * 360
+        patch = skimage.transform.rotate(patch, angle)
+        mask = skimage.transform.rotate(mask, angle)
+        patch = patch[b:, b:][:s, :s]
+        mask = mask[b:, b:][:s, :s]
         if random.random() < 0.5:
-           patch = np.flip(patch, axis=1).copy()
-        assert patch.shape == (self.size, self.size, 3), patch.shape
-        return self.transform(patch), target
+            patch = np.flip(patch, axis=1).copy()
+            mask = np.flip(mask, axis=1).copy()
+        assert patch.shape == mask.shape == (s, s, 3), (patch.shape, mask.shape)
+        if any_lions and self.debug:
+            # TODO - check
+            skimage.io.imsave('patch.jpg', patch)
+            skimage.io.imsave('mask.jpg', mask * 255 / N_CLASSES)
+        return self.transform(patch), self.to_tensor(mask)
 
     def __len__(self):
-        return len(self.coords) * int(1 + self.neg_ratio)
-
-
-def predict(model: nn.Module, loader: DataLoader, out_path: Path):
-    model.eval()
-    model.is_fcn = True
-    dataset = loader.dataset  # type: PatchDataset
-    # TODO - this likely needs splitting into patches
-    for img_id, img in tqdm.tqdm(dataset.imgs.items()):
-        img = dataset.transform(img)  # type: torch.FloatTensor
-        img = img.expand(1, *img.size())
-        img = variable(img, volatile=True)
-        output = model(img)[0].data.numpy()
-        print(output.shape)
-        np.save(str(out_path.joinpath(str(img_id))), output)
+        patch_area = self.patch_size ** 2
+        return int(sum(img.shape[0] * img.shape[1] / patch_area
+                       for img in self.imgs.values()))
 
 
 def make_loader(args, paths: List[Path], coords: pd.DataFrame,
@@ -103,10 +99,10 @@ def make_loader(args, paths: List[Path], coords: pd.DataFrame,
         # TODO - check actual values
         Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]),
     ])
-    dataset = PatchDataset(
+    dataset = SegmentationDataset(
         img_paths=paths,
         coords=coords,
-        size=args.patch_size,
+        patch_size=args.patch_size,
         transform=transform,
         deterministic=deterministic,
     )
@@ -122,8 +118,8 @@ def main():
     parser = argparse.ArgumentParser()
     arg = parser.add_argument
     arg('root', help='checkpoint root')
-    arg('--batch-size', type=int, default=16)
-    arg('--patch-size', type=int, default=96)
+    arg('--batch-size', type=int, default=4)
+    arg('--patch-size', type=int, default=256)
     arg('--n-epochs', type=int, default=100)
     arg('--lr', type=float, default=0.0001)
     arg('--workers', type=int, default=2)
@@ -142,7 +138,7 @@ def main():
         make_loader(args, valid_paths, coords, deterministic=True))
 
     root = Path(args.root)
-    model = BaselineCNN(patch_size=args.patch_size)
+    model = UNet()
     model = cuda(model)
     criterion = nn.CrossEntropyLoss()
     if args.mode == 'train':
@@ -155,7 +151,9 @@ def main():
     elif args.mode == 'validation':
         validation(model, criterion, valid_loader)
     elif args.mode == 'predict':
-        predict(model, valid_loader, out_path=root)
+        # TODO
+        # predict(model, valid_loader, out_path=root)
+        parser.error('TODO')
     else:
         parser.error('Unexpected mode {}'.format(args.mode))
 

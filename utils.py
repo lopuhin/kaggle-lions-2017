@@ -1,14 +1,21 @@
 import json
 from datetime import datetime
+from itertools import islice
 from pathlib import Path
 from pprint import pprint
+from typing import Dict, List, Tuple
 
 #import matplotlib.pyplot as plt
 
 import cv2
+import pandas as pd
 import numpy as np
+from sklearn.model_selection import ShuffleSplit
 import torch
+from torch import nn
 from torch.autograd import Variable
+from torch.optim import Adam
+import tqdm
 
 
 N_CLASSES = 5
@@ -37,6 +44,92 @@ def write_event(log, step: int, **data):
     log.write(json.dumps(data, sort_keys=True))
     log.write('\n')
     log.flush()
+
+
+def train_valid_split(fold: int, n_folds: int
+                      ) -> Tuple[List[Path], List[Path]]:
+    img_paths = np.array(list(Path('./data/Train/').glob('*.jpg')))
+    cv_split = ShuffleSplit(n_splits=n_folds, random_state=42)
+    img_folds = list(cv_split.split(img_paths))
+    train_ids, valid_ids = img_folds[fold - 1]
+    return img_paths[train_ids], img_paths[valid_ids]
+
+
+def load_coords():
+    return pd.read_csv('./data/coords-threeplusone.csv', index_col=0)
+
+
+def train(args, model: nn.Module, criterion, *, train_loader, valid_loader):
+    optimizer = Adam(model.parameters(), lr=args.lr)
+
+    model_path = Path(args.root).joinpath('model.pt')
+    if model_path.exists():
+        state = torch.load(str(model_path))
+        epoch = state['epoch']
+        step = state['step']
+        model.load_state_dict(state['model'])
+        print('Restored model, epoch {}, step {:,}'.format(epoch, step))
+    else:
+        epoch = 1
+        step = 0
+
+    save = lambda ep: torch.save({
+        'model': model.state_dict(),
+        'epoch': ep,
+        'step': step,
+    }, str(model_path))
+
+    report_each = 10
+    log = Path(args.root).joinpath('train.log').open('at', encoding='utf8')
+    for epoch in range(epoch, args.n_epochs + 1):
+        model.train()
+        if args.epoch_size:
+            epoch_batches = args.epoch_size // args.batch_size
+            tq = tqdm.tqdm(islice(train_loader, epoch_batches),
+                           total=epoch_batches)
+        else:
+            tq = tqdm.tqdm(train_loader)
+        tq.set_description('Epoch {}'.format(epoch))
+        losses = []
+        try:
+            for i, (inputs, targets) in enumerate(tq):
+                inputs, targets = variable(inputs), variable(targets)
+                outputs = model(inputs)
+                outputs = outputs.view(outputs.size(0), -1)
+                loss = criterion(outputs, targets)
+                optimizer.zero_grad()
+                batch_size = inputs.size(0)
+                (batch_size * loss).backward()
+                optimizer.step()
+                step += 1
+                losses.append(loss.data[0])
+                mean_loss = np.mean(losses[-report_each:])
+                tq.set_postfix(loss=mean_loss)
+                if i and i % report_each == 0:
+                    write_event(log, step, loss=mean_loss)
+            tq.close()
+            save(epoch + 1)
+            valid_metrics = validation(model, criterion, valid_loader)
+            write_event(log, step, **valid_metrics)
+        except KeyboardInterrupt:
+            tq.close()
+            print('Ctrl+C, saving snapshot')
+            save(epoch)
+            print('done.')
+            return
+
+
+def validation(model: nn.Module, criterion, valid_loader) -> Dict[str, float]:
+    model.eval()
+    losses = []
+    for inputs, targets in valid_loader:
+        inputs, targets = variable(inputs, volatile=True), variable(targets)
+        outputs = model(inputs)
+        loss = criterion(outputs, targets)
+        losses.append(loss.data[0])
+    valid_loss = np.mean(losses)  # type: float
+    print('Valid loss: {:.3f}'.format(valid_loss))
+    return {'valid_loss': valid_loss}
 
 
 def plot(*args, ymin=None, ymax=None, xmin=None, xmax=None, params=False):
