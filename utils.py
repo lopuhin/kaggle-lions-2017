@@ -1,5 +1,6 @@
 import json
 from datetime import datetime
+import glob
 from itertools import islice
 from pathlib import Path
 from pprint import pprint
@@ -103,7 +104,7 @@ def train(args, model: nn.Module, criterion, *, train_loader, valid_loader):
         'step': step,
     }, str(model_path))
 
-    report_each = 100
+    report_each = 50
     log = Path(args.root).joinpath('train.log').open('at', encoding='utf8')
     for epoch in range(epoch, args.n_epochs + 1):
         model.train()
@@ -163,10 +164,14 @@ def plot(*args, ymin=None, ymax=None, xmin=None, xmax=None, params=False):
     paths, keys = [], []
     for x in args:
         if x.startswith('.') or x.startswith('/'):
-            paths.append(x)
+            if '*' in x:
+                paths.extend(glob.glob(x))
+            else:
+                paths.append(x)
         else:
             keys.append(x)
     plt.figure(figsize=(12, 8))
+    keys = keys or ['loss', 'valid_loss']
 
     ylim_kw = {}
     if ymin is not None:
