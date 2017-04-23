@@ -11,22 +11,17 @@ import numpy as np
 import skimage.transform
 import skimage.io
 from torch import nn
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import DataLoader
 from torchvision.transforms import Compose, ToTensor, Normalize
 
 from utils import (
-    N_CLASSES, load_image, cuda, load_coords,
-    train_valid_split, train, validation,
+    N_CLASSES, cuda, load_coords, train_valid_split, train, validation,
+    BaseDataset
 )
+from unet_models import UNet
 
 
-class UNet(nn.Module):
-    def __init__(self):
-        super().__init__()
-        self.conv = nn.Conv2d(1, 1, 1)
-
-
-class SegmentationDataset(Dataset):
+class SegmentationDataset(BaseDataset):
     def __init__(self,
                  img_paths: List[Path],
                  coords: pd.DataFrame,
@@ -36,11 +31,7 @@ class SegmentationDataset(Dataset):
                  debug: bool=False,
                  deterministic: bool=False,
                  ):
-        self.img_ids = [
-            int(p.name.split('.')[0]) for p in img_paths]
-        self.imgs = {img_id: load_image(p)
-                     for img_id, p in zip(self.img_ids, img_paths)}
-        self.coords = coords.loc[self.img_ids]
+        super().__init__(img_paths, coords)
         self.patch_size = patch_size
         self.mark_r = mask_r
         self.transform = transform
@@ -132,7 +123,7 @@ def main():
     args = parser.parse_args()
 
     coords = load_coords()
-    train_paths, valid_paths = train_valid_split(args.fold, args.n_folds)
+    train_paths, valid_paths = train_valid_split(args)
     train_loader, valid_loader = (
         make_loader(args, train_paths, coords),
         make_loader(args, valid_paths, coords, deterministic=True))
@@ -140,7 +131,7 @@ def main():
     root = Path(args.root)
     model = UNet()
     model = cuda(model)
-    criterion = nn.CrossEntropyLoss()
+    criterion = nn.NLLLoss2d()
     if args.mode == 'train':
         if root.exists() and args.clean:
             shutil.rmtree(str(root))

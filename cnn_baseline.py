@@ -11,18 +11,18 @@ import numpy as np
 import skimage.transform
 import torch
 from torch import nn
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import DataLoader
 from torchvision.transforms import ToTensor, Normalize, Compose
 import tqdm
 
 from utils import (
-    N_CLASSES, load_image, variable, cuda, load_coords, train_valid_split,
-    train, validation,
+    N_CLASSES, variable, cuda, load_coords, train_valid_split,
+    train, validation, BaseDataset
 )
 from models import BaselineCNN
 
 
-class PatchDataset(Dataset):
+class PatchDataset(BaseDataset):
     def __init__(self,
                  img_paths: List[Path],
                  coords: pd.DataFrame,
@@ -32,11 +32,7 @@ class PatchDataset(Dataset):
                  rotate: bool=True,
                  deterministic: bool=False,
                  ):
-        self.img_ids = [
-            int(p.name.split('.')[0]) for p in img_paths]
-        self.imgs = {img_id: load_image(p)
-                     for img_id, p in zip(self.img_ids, img_paths)}
-        self.coords = coords.loc[self.img_ids]
+        super().__init__(img_paths, coords)
         self.neg_ratio = neg_ratio
         assert size % 2 == 0
         self.size = size
@@ -52,7 +48,7 @@ class PatchDataset(Dataset):
             random.seed(idx)
         if idx < len(self.coords):  # positive
             item = self.coords.iloc[idx]
-            y, x = item.row, item.col
+            y, x = int(item.row), int(item.col)
             shift = 16
             y += random.randint(-shift, shift)
             x += random.randint(-shift, shift)
@@ -133,10 +129,11 @@ def main():
         default='train')
     arg('--clean', action='store_true')
     arg('--epoch-size', type=int)
+    arg('--limit', type=int, help='Use only N images for train/valid')
     args = parser.parse_args()
 
     coords = load_coords()
-    train_paths, valid_paths = train_valid_split(args.fold, args.n_folds)
+    train_paths, valid_paths = train_valid_split(args)
     train_loader, valid_loader = (
         make_loader(args, train_paths, coords),
         make_loader(args, valid_paths, coords, deterministic=True))

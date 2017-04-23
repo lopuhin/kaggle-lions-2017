@@ -3,9 +3,10 @@ from datetime import datetime
 from itertools import islice
 from pathlib import Path
 from pprint import pprint
+import random
 from typing import Dict, List, Tuple
 
-#import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt
 
 import cv2
 import pandas as pd
@@ -15,6 +16,7 @@ import torch
 from torch import nn
 from torch.autograd import Variable
 from torch.optim import Adam
+from torch.utils.data import Dataset
 import tqdm
 
 
@@ -32,9 +34,15 @@ def cuda(x):
     return x.cuda() if cuda_is_available else x
 
 
-def load_image(path: Path) -> np.ndarray:
+def load_image(path: Path, cache: bool=True) -> np.ndarray:
+    cached_path = path.parent.joinpath(path.stem + '.npy')  # type: Path
+    if cache and cached_path.exists():
+        return np.load(str(cached_path))
     img = cv2.imread(str(path))
     img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    if cache:
+        with cached_path.open('wb') as f:
+            np.save(f, img)
     return img
 
 
@@ -46,17 +54,33 @@ def write_event(log, step: int, **data):
     log.flush()
 
 
-def train_valid_split(fold: int, n_folds: int
-                      ) -> Tuple[List[Path], List[Path]]:
-    img_paths = np.array(list(Path('./data/Train/').glob('*.jpg')))
-    cv_split = ShuffleSplit(n_splits=n_folds, random_state=42)
+def train_valid_split(args) -> Tuple[List[Path], List[Path]]:
+    img_paths = list(Path('./data/Train/').glob('*.jpg'))
+    if args.limit and len(img_paths) > args.limit:
+        random.seed(42)
+        img_paths = random.sample(img_paths, args.limit)
+    img_paths = np.array(sorted(img_paths))
+    cv_split = ShuffleSplit(n_splits=args.n_folds, random_state=42)
     img_folds = list(cv_split.split(img_paths))
-    train_ids, valid_ids = img_folds[fold - 1]
+    train_ids, valid_ids = img_folds[args.fold - 1]
     return img_paths[train_ids], img_paths[valid_ids]
 
 
 def load_coords():
     return pd.read_csv('./data/coords-threeplusone.csv', index_col=0)
+
+
+class BaseDataset(Dataset):
+    def __init__(self,
+                 img_paths: List[Path],
+                 coords: pd.DataFrame,
+                 ):
+        self.img_ids = [int(p.name.split('.')[0]) for p in img_paths]
+        tq_img_paths = tqdm.tqdm(img_paths, desc='Images')
+        self.imgs = {img_id: load_image(p)
+                     for img_id, p in zip(self.img_ids, tq_img_paths)}
+        tq_img_paths.close()
+        self.coords = coords.loc[self.img_ids].dropna()
 
 
 def train(args, model: nn.Module, criterion, *, train_loader, valid_loader):
@@ -79,20 +103,19 @@ def train(args, model: nn.Module, criterion, *, train_loader, valid_loader):
         'step': step,
     }, str(model_path))
 
-    report_each = 10
+    report_each = 100
     log = Path(args.root).joinpath('train.log').open('at', encoding='utf8')
     for epoch in range(epoch, args.n_epochs + 1):
         model.train()
+        tq = tqdm.tqdm(total=(args.epoch_size or
+                              len(train_loader) * args.batch_size))
         if args.epoch_size:
-            epoch_batches = args.epoch_size // args.batch_size
-            tq = tqdm.tqdm(islice(train_loader, epoch_batches),
-                           total=epoch_batches)
-        else:
-            tq = tqdm.tqdm(train_loader)
+            train_loader = islice(
+                train_loader, args.epoch_size // args.batch_size)
         tq.set_description('Epoch {}'.format(epoch))
         losses = []
         try:
-            for i, (inputs, targets) in enumerate(tq):
+            for i, (inputs, targets) in enumerate(train_loader):
                 inputs, targets = variable(inputs), variable(targets)
                 outputs = model(inputs)
                 outputs = outputs.view(outputs.size(0), -1)
@@ -102,6 +125,7 @@ def train(args, model: nn.Module, criterion, *, train_loader, valid_loader):
                 (batch_size * loss).backward()
                 optimizer.step()
                 step += 1
+                tq.update(batch_size)
                 losses.append(loss.data[0])
                 mean_loss = np.mean(losses[-report_each:])
                 tq.set_postfix(loss=mean_loss)
