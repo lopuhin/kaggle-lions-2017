@@ -15,7 +15,7 @@ import torch
 from torch import nn
 from torch.optim import Adam
 from torch.utils.data import Dataset, DataLoader
-from torchvision.transforms import ToTensor
+from torchvision.transforms import ToTensor, Normalize, Compose
 import tqdm
 
 from utils import N_CLASSES, load_image, write_event, variable, cuda
@@ -155,13 +155,32 @@ def validation(model: nn.Module, criterion, valid_loader) -> Dict[str, float]:
     return {'valid_loss': valid_loss}
 
 
+def predict(model: nn.Module, loader: DataLoader, out_path: Path):
+    model.eval()
+    model.is_fcn = True
+    dataset = loader.dataset  # type: PatchDataset
+    # TODO - this likely needs splitting into patches
+    for img_id, img in tqdm.tqdm(dataset.imgs.items()):
+        img = dataset.transform(img)  # type: torch.FloatTensor
+        img = img.expand(1, *img.size())
+        img = variable(img, volatile=True)
+        output = model(img)[0].data.numpy()
+        print(output.shape)
+        np.save(str(out_path.joinpath(str(img_id))), output)
+
+
 def make_loader(args, paths: List[Path], coords: pd.DataFrame,
                 deterministic: bool=False) -> DataLoader:
+    transform = Compose([
+        ToTensor(),
+        # TODO - check actual values
+        Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]),
+    ])
     dataset = PatchDataset(
         img_paths=paths,
         coords=coords,
         size=args.patch_size,
-        transform=ToTensor(),
+        transform=transform,
         deterministic=deterministic,
     )
     return DataLoader(
@@ -194,7 +213,8 @@ def main():
     arg('--workers', type=int, default=2)
     arg('--fold', type=int, default=1)
     arg('--n-folds', type=int, default=5)
-    arg('--mode', choices=['train', 'validation'], default='train')
+    arg('--mode', choices=['train', 'validation', 'predict'],
+        default='train')
     arg('--clean', action='store_true')
     arg('--epoch-size', type=int)
     args = parser.parse_args()
@@ -214,6 +234,10 @@ def main():
               train_loader=train_loader, valid_loader=valid_loader)
     elif args.mode == 'validation':
         validation(model, criterion, valid_loader)
+    elif args.mode == 'predict':
+        predict(model, valid_loader, out_path=root)
+    else:
+        parser.error('Unexpected mode {}'.format(args.mode))
 
 
 if __name__ == '__main__':
