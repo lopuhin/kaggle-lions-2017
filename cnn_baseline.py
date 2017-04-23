@@ -10,6 +10,7 @@ from typing import Dict, List
 import pandas as pd
 import numpy as np
 from sklearn.model_selection import ShuffleSplit
+import skimage.transform
 import torch
 from torch import nn
 from torch.optim import Adam
@@ -28,7 +29,8 @@ class PatchDataset(Dataset):
                  transform,
                  neg_ratio: float=1,
                  size: int=96,
-                 deterministic=False,
+                 rotate: bool=True,
+                 deterministic: bool=False,
                  ):
         self.img_ids = [
             int(p.name.split('.')[0]) for p in img_paths]
@@ -39,10 +41,13 @@ class PatchDataset(Dataset):
         assert size % 2 == 0
         self.size = size
         self.transform = transform
+        self.rotate = rotate
         self.deterministic = deterministic
 
     def __getitem__(self, idx):
         r = self.size // 2
+        if self.rotate:
+            r = int(np.ceil(r * np.sqrt(2)))
         if self.deterministic:
             random.seed(idx)
         if idx < len(self.coords):  # positive
@@ -62,8 +67,12 @@ class PatchDataset(Dataset):
             # can accidentally be close to a positive class
             x, y = (random.randint(r, max_x - r),
                     random.randint(r, max_y - r))
-        # TODO: rotations
         patch = img[y - r: y + r, x - r: x + r]
+        if self.rotate:
+            angle = random.random() * 360
+            patch = skimage.transform.rotate(patch, angle)
+            b = int(r - self.size // 2)
+            patch = patch[b:, b:][:self.size, :self.size]
         if random.random() < 0.5:
            patch = np.flip(patch, axis=1).copy()
         assert patch.shape == (self.size, self.size, 3), patch.shape
