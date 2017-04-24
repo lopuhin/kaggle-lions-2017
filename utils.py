@@ -56,8 +56,11 @@ def write_event(log, step: int, **data):
     log.flush()
 
 
+DATA_ROOT = Path(__file__).absolute().parent / 'data'
+
+
 def train_valid_split(args) -> Tuple[List[Path], List[Path]]:
-    img_paths = list(Path('./data/Train/').glob('*.jpg'))
+    img_paths = list(DATA_ROOT.joinpath('Train').glob('*.jpg'))
     if args.limit and len(img_paths) > args.limit:
         random.seed(42)
         img_paths = random.sample(img_paths, args.limit)
@@ -66,9 +69,6 @@ def train_valid_split(args) -> Tuple[List[Path], List[Path]]:
     img_folds = list(cv_split.split(img_paths))
     train_ids, valid_ids = img_folds[args.fold - 1]
     return img_paths[train_ids], img_paths[valid_ids]
-
-
-DATA_ROOT = Path(__file__).absolute().parent / 'data'
 
 
 def load_coords():
