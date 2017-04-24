@@ -1,5 +1,3 @@
-- train on full dataset
-- visualize detector predictions
 - train count prediction classifier
 - accuracy report, confusion matrix
 - image scale - how much does it vary? how to estimate it?

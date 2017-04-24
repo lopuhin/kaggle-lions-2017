@@ -10,8 +10,8 @@ import pandas as pd
 import numpy as np
 import skimage.io
 import skimage.transform
-import torch
 from torch import nn
+from torch.nn import functional as F
 from torch.utils.data import DataLoader
 from torchvision.transforms import ToTensor, Normalize, Compose
 import torchvision.models
@@ -19,7 +19,7 @@ import tqdm
 
 from utils import (
     N_CLASSES, variable, cuda, load_coords, train_valid_split,
-    train, validation, BaseDataset, load_best_model,
+    train, validation, BaseDataset, load_best_model, load_image,
 )
 
 
@@ -28,7 +28,7 @@ class PatchDataset(BaseDataset):
                  img_paths: List[Path],
                  coords: pd.DataFrame,
                  transform,
-                 neg_ratio: float=1,
+                 neg_ratio: float=1,  # or 5
                  size: int=96,
                  rotate: bool=True,
                  deterministic: bool=False,
@@ -83,31 +83,57 @@ class PatchDataset(BaseDataset):
         return len(self.coords) * int(1 + self.neg_ratio)
 
 
-def predict(model: nn.Module, loader: DataLoader, out_path: Path):
+def make_resnet_fcn(model: torchvision.models.ResNet):
+    fc_bias = variable(model.fc.state_dict()['bias'])
+    fc_weight = variable(model.fc.state_dict()['weight'])
+    fc_weight = fc_weight.unsqueeze(2).unsqueeze(3)
+
+    def forward(x):
+        self = model
+        x = self.conv1(x)
+        x = self.bn1(x)
+        x = self.relu(x)
+        x = self.maxpool(x)
+
+        x = self.layer1(x)
+        x = self.layer2(x)
+        x = self.layer3(x)
+        x = self.layer4(x)
+
+        x = self.avgpool(x)
+        x = F.conv2d(x, fc_weight, fc_bias)
+        return x
+
+    model.forward = forward
+
+
+def predict(model: nn.Module, img_paths: List[Path], out_path: Path):
+    make_resnet_fcn(model)
     model.eval()
-    model.is_fcn = True
-    dataset = loader.dataset  # type: PatchDataset
-    # TODO - this likely needs splitting into patches
-    for img_id, img in tqdm.tqdm(dataset.imgs.items()):
-        img = dataset.transform(img)  # type: torch.FloatTensor
-        img = img.expand(1, *img.size())
-        img = variable(img, volatile=True)
-        output = model(img)[0].data.numpy()
-        print(output.shape)
-        np.save(str(out_path.joinpath(str(img_id))), output)
+    for img_path in tqdm.tqdm(img_paths):
+        img = load_image(img_path, cache=False)
+        inputs = img_transform(img)
+        inputs = inputs.unsqueeze(0)
+        inputs = variable(inputs, volatile=True)
+        outputs = F.softmax(model(inputs))
+        output = outputs[0].data.cpu().numpy()
+        np.save(str(out_path / '{}-pred.npy'.format(img_path.stem)),
+                output)
+
+
+img_transform = Compose([
+    ToTensor(),
+    Normalize(mean=[0.44, 0.46, 0.46], std=[0.16, 0.15, 0.15]),
+])
 
 
 def make_loader(args, paths: List[Path], coords: pd.DataFrame,
                 deterministic: bool=False) -> DataLoader:
-    transform = Compose([
-        ToTensor(),
-        Normalize(mean=[0.44, 0.46, 0.46], std=[0.16, 0.15, 0.15]),
-    ])
     dataset = PatchDataset(
         img_paths=paths,
         coords=coords,
         size=args.patch_size,
-        transform=transform,
+        transform=img_transform,
         deterministic=deterministic,
     )
     return DataLoader(
@@ -129,26 +155,25 @@ def main():
     arg('--workers', type=int, default=2)
     arg('--fold', type=int, default=1)
     arg('--n-folds', type=int, default=5)
-    arg('--mode', choices=['train', 'validation', 'predict'],
+    arg('--mode', choices=['train', 'validation', 'predict_valid'],
         default='train')
     arg('--clean', action='store_true')
     arg('--epoch-size', type=int)
     arg('--limit', type=int, help='Use only N images for train/valid')
     args = parser.parse_args()
 
+    root = Path(args.root)
     coords = load_coords()
     train_paths, valid_paths = train_valid_split(args)
-    train_loader, valid_loader = (
-        make_loader(args, train_paths, coords),
-        make_loader(args, valid_paths, coords, deterministic=True))
-
-    root = Path(args.root)
     # model = BaselineCNN(patch_size=args.patch_size)
     model = torchvision.models.resnet18(num_classes=N_CLASSES + 1)
-    model.avgpool = nn.AvgPool2d(args.patch_size // 32)
+    model.avgpool = nn.AvgPool2d(args.patch_size // 32, stride=1)
     model = cuda(model)
     criterion = nn.CrossEntropyLoss()
     if args.mode == 'train':
+        train_loader, valid_loader = (
+            make_loader(args, train_paths, coords),
+            make_loader(args, valid_paths, coords, deterministic=True))
         if root.exists() and args.clean:
             shutil.rmtree(str(root))
         root.mkdir(exist_ok=True)
@@ -156,11 +181,13 @@ def main():
         train(args, model, criterion,
               train_loader=train_loader, valid_loader=valid_loader)
     elif args.mode == 'validation':
+        valid_loader = (
+            make_loader(args, valid_paths, coords, deterministic=True))
         load_best_model(model, root)
         validation(model, criterion, valid_loader)
-    elif args.mode == 'predict':
+    elif args.mode == 'predict_valid':
         load_best_model(model, root)
-        predict(model, valid_loader, out_path=root)
+        predict(model, valid_paths, out_path=root)
     else:
         parser.error('Unexpected mode {}'.format(args.mode))
 

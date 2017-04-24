@@ -36,7 +36,7 @@ def cuda(x):
     return x.cuda() if cuda_is_available else x
 
 
-def load_image(path: Path, cache: bool=True) -> np.ndarray:
+def load_image(path: Path, *, cache: bool) -> np.ndarray:
     cached_path = path.parent.joinpath(path.stem + '.npy')  # type: Path
     if cache and cached_path.exists():
         return np.load(str(cached_path))
@@ -79,7 +79,7 @@ class BaseDataset(Dataset):
                  ):
         self.img_ids = [int(p.name.split('.')[0]) for p in img_paths]
         tq_img_paths = tqdm.tqdm(img_paths, desc='Images')
-        self.imgs = {img_id: load_image(p)
+        self.imgs = {img_id: load_image(p, cache=True)
                      for img_id, p in zip(self.img_ids, tq_img_paths)}
         tq_img_paths.close()
         self.coords = coords.loc[self.img_ids].dropna()
