@@ -5,6 +5,7 @@ from itertools import islice
 from pathlib import Path
 from pprint import pprint
 import random
+import shutil
 from typing import Dict, List, Tuple
 
 import matplotlib.pyplot as plt
@@ -87,21 +88,26 @@ class BaseDataset(Dataset):
 def train(args, model: nn.Module, criterion, *, train_loader, valid_loader):
     optimizer = Adam(model.parameters(), lr=args.lr)
 
-    model_path = Path(args.root).joinpath('model.pt')
+    root = Path(args.root)
+    model_path = root / 'model.pt'
+    best_model_path = root / 'best-model.pt'
     if model_path.exists():
         state = torch.load(str(model_path))
         epoch = state['epoch']
         step = state['step']
+        best_valid_loss = state['best_valid_loss']
         model.load_state_dict(state['model'])
         print('Restored model, epoch {}, step {:,}'.format(epoch, step))
     else:
         epoch = 1
         step = 0
+        best_valid_loss = float('inf')
 
     save = lambda ep: torch.save({
         'model': model.state_dict(),
         'epoch': ep,
         'step': step,
+        'best_valid_loss': best_valid_loss
     }, str(model_path))
 
     report_each = 50
@@ -138,6 +144,10 @@ def train(args, model: nn.Module, criterion, *, train_loader, valid_loader):
             save(epoch + 1)
             valid_metrics = validation(model, criterion, valid_loader)
             write_event(log, step, **valid_metrics)
+            valid_loss = valid_metrics['valid_loss']
+            if valid_loss < best_valid_loss:
+                best_valid_loss = valid_loss
+                shutil.copy(str(model_path), str(best_model_path))
         except KeyboardInterrupt:
             tq.close()
             print('Ctrl+C, saving snapshot')
@@ -157,6 +167,12 @@ def validation(model: nn.Module, criterion, valid_loader) -> Dict[str, float]:
     valid_loss = np.mean(losses)  # type: float
     print('Valid loss: {:.3f}'.format(valid_loss))
     return {'valid_loss': valid_loss}
+
+
+def load_best_model(model: nn.Module, root: Path) -> None:
+    state = torch.load(str(root / 'best-model.pt'))
+    model.load_state_dict(state['model'])
+    print('Loaded model from epoch {epoch}, step {step:,}'.format(**state))
 
 
 def plot(*args, ymin=None, ymax=None, xmin=None, xmax=None, params=False):

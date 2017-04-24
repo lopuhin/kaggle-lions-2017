@@ -1,10 +1,13 @@
 - train on full dataset
-- accuracy report, confusion matrix
 - visualize detector predictions
+- train count prediction classifier
+- accuracy report, confusion matrix
 - image scale - how much does it vary? how to estimate it?
   just label and add scale as output to a network?
   but maybe it's not so important for other approaches, so it's fine to skip it?
-- train count prediction classifier
+
+misc:
+- multithreaded dataloader
 
 dumb baseline:
 - predict on small patches
@@ -13,6 +16,7 @@ dumb baseline:
 
 UNet:
 - predict big squares
+- separate models for different classes?
 
 "proper" pipeline ideas:
 - ???

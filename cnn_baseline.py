@@ -19,9 +19,8 @@ import tqdm
 
 from utils import (
     N_CLASSES, variable, cuda, load_coords, train_valid_split,
-    train, validation, BaseDataset,
+    train, validation, BaseDataset, load_best_model,
 )
-from models import BaselineCNN
 
 
 class PatchDataset(BaseDataset):
@@ -157,8 +156,10 @@ def main():
         train(args, model, criterion,
               train_loader=train_loader, valid_loader=valid_loader)
     elif args.mode == 'validation':
+        load_best_model(model, root)
         validation(model, criterion, valid_loader)
     elif args.mode == 'predict':
+        load_best_model(model, root)
         predict(model, valid_loader, out_path=root)
     else:
         parser.error('Unexpected mode {}'.format(args.mode))
