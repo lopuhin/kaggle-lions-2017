@@ -68,8 +68,12 @@ def train_valid_split(args) -> Tuple[List[Path], List[Path]]:
     return img_paths[train_ids], img_paths[valid_ids]
 
 
+DATA_ROOT = Path(__file__).absolute().parent / 'data'
+
+
 def load_coords():
-    return pd.read_csv('./data/coords-threeplusone.csv', index_col=0)
+    return pd.read_csv(str(DATA_ROOT / 'coords-threeplusone.csv'),
+                       index_col=0)
 
 
 class BaseDataset(Dataset):
