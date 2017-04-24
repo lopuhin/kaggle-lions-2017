@@ -1,8 +1,7 @@
-- why is cnn_baseline so poor, esp. on shallow water?
-  - bug in prediction generation?
-  - bug in how fcn model is built?
-  - poor prediction quality?
-  - what else?
+- why is cnn_baseline so poor:
+  - shallow water looks poor due to few negatives
+  - model is very sensitive to precise position - FCN seems to miss a lot
+  - neg-5 model might need more training
 
 misc:
 - multithreaded dataloader
