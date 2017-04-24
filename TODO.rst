@@ -1,8 +1,8 @@
-- train count prediction classifier
-- accuracy report, confusion matrix
-- image scale - how much does it vary? how to estimate it?
-  just label and add scale as output to a network?
-  but maybe it's not so important for other approaches, so it's fine to skip it?
+- why is cnn_baseline so poor, esp. on shallow water?
+  - bug in prediction generation?
+  - bug in how fcn model is built?
+  - poor prediction quality?
+  - what else?
 
 misc:
 - multithreaded dataloader
