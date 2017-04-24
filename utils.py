@@ -136,7 +136,7 @@ def train(args, model: nn.Module, criterion, *, train_loader, valid_loader):
                 tq.update(batch_size)
                 losses.append(loss.data[0])
                 mean_loss = np.mean(losses[-report_each:])
-                tq.set_postfix(loss=mean_loss)
+                tq.set_postfix(loss='{:.3f}'.format(mean_loss))
                 if i and i % report_each == 0:
                     write_event(log, step, loss=mean_loss)
             write_event(log, step, loss=mean_loss)
@@ -175,7 +175,8 @@ def load_best_model(model: nn.Module, root: Path) -> None:
     print('Loaded model from epoch {epoch}, step {step:,}'.format(**state))
 
 
-def plot(*args, ymin=None, ymax=None, xmin=None, xmax=None, params=False):
+def plot(*args, ymin=None, ymax=None, xmin=None, xmax=None, params=False,
+         max_points=200):
     """ Use in the notebook like this:
     plot('./runs/oc2', './runs/oc1', 'loss', 'valid_loss')
     """
@@ -220,5 +221,11 @@ def plot(*args, ymin=None, ymax=None, xmin=None, xmax=None, params=False):
                     xs.append(e['step'])
                     ys.append(e[key])
             if xs:
+                if len(xs) > 2 * max_points:
+                    indices = (np.arange(0, len(xs), len(xs) / max_points)
+                               .astype(np.int32))
+                    xs = np.array(xs)[indices[1:]]
+                    ys = [np.mean(ys[idx: indices[i + 1]])
+                          for i, idx in enumerate(indices[:-1])]
                 plt.plot(xs, ys, label='{}: {}'.format(path, key))
     plt.legend()
