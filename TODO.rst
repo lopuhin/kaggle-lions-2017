@@ -12,7 +12,9 @@ dumb baseline:
 - estimate count based on the number of positive patches (or something like this)
 
 UNet:
-- predict big squares
+- train log loss longer, try giving less weight to no lion class
+- change loss:
+  - add dice, maybe modify it (pos/neg weights, square size)
 - separate models for different classes?
 
 "proper" pipeline ideas:
