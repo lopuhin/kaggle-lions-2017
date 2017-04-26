@@ -28,7 +28,7 @@ class PatchDataset(BaseDataset):
                  img_paths: List[Path],
                  coords: pd.DataFrame,
                  transform,
-                 neg_ratio: float=1,  # or 5
+                 neg_ratio: float=5,
                  size: int=96,
                  rotate: bool=True,
                  deterministic: bool=False,
@@ -52,7 +52,7 @@ class PatchDataset(BaseDataset):
         if idx < len(self.coords):  # positive
             item = self.coords.iloc[idx]
             y, x = int(item.row), int(item.col)
-            shift = 16
+            shift = 32
             y += random.randint(-shift, shift)
             x += random.randint(-shift, shift)
             target = int(item.cls)
