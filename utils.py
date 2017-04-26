@@ -138,7 +138,7 @@ def train(args, model: nn.Module, criterion, *, train_loader, valid_loader):
         'best_valid_loss': best_valid_loss
     }, str(model_path))
 
-    report_each = 50
+    report_each = 10
     log = Path(args.root).joinpath('train.log').open('at', encoding='utf8')
     for epoch in range(epoch, args.n_epochs + 1):
         model.train()
