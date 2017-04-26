@@ -12,14 +12,13 @@ import skimage.io
 import skimage.transform
 from torch import nn
 from torch.nn import functional as F
-from torch.utils.data import DataLoader
-from torchvision.transforms import ToTensor, Normalize, Compose
 import torchvision.models
 import tqdm
 
 from utils import (
     N_CLASSES, variable, cuda, load_coords, train_valid_split,
     train, validation, BaseDataset, load_best_model, load_image,
+    img_transform, make_loader,
 )
 
 
@@ -121,29 +120,6 @@ def predict(model: nn.Module, img_paths: List[Path], out_path: Path):
                 output)
 
 
-img_transform = Compose([
-    ToTensor(),
-    Normalize(mean=[0.44, 0.46, 0.46], std=[0.16, 0.15, 0.15]),
-])
-
-
-def make_loader(args, paths: List[Path], coords: pd.DataFrame,
-                deterministic: bool=False) -> DataLoader:
-    dataset = PatchDataset(
-        img_paths=paths,
-        coords=coords,
-        size=args.patch_size,
-        transform=img_transform,
-        deterministic=deterministic,
-    )
-    return DataLoader(
-        dataset=dataset,
-        shuffle=True,
-        num_workers=args.workers,
-        batch_size=args.batch_size,
-    )
-
-
 def main():
     parser = argparse.ArgumentParser()
     arg = parser.add_argument
@@ -172,8 +148,9 @@ def main():
     criterion = nn.CrossEntropyLoss()
     if args.mode == 'train':
         train_loader, valid_loader = (
-            make_loader(args, train_paths, coords),
-            make_loader(args, valid_paths, coords, deterministic=True))
+            make_loader(PatchDataset, args, train_paths, coords),
+            make_loader(PatchDataset, args, valid_paths, coords,
+                        deterministic=True))
         if root.exists() and args.clean:
             shutil.rmtree(str(root))
         root.mkdir(exist_ok=True)

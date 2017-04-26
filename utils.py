@@ -18,7 +18,8 @@ import torch
 from torch import nn
 from torch.autograd import Variable
 from torch.optim import Adam
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, DataLoader
+from torchvision.transforms import ToTensor, Normalize, Compose
 import tqdm
 
 
@@ -36,6 +37,12 @@ def cuda(x):
     return x.cuda() if cuda_is_available else x
 
 
+img_transform = Compose([
+    ToTensor(),
+    Normalize(mean=[0.44, 0.46, 0.46], std=[0.16, 0.15, 0.15]),
+])
+
+
 def load_image(path: Path, *, cache: bool) -> np.ndarray:
     cached_path = path.parent.joinpath(path.stem + '.npy')  # type: Path
     if cache and cached_path.exists():
@@ -46,6 +53,24 @@ def load_image(path: Path, *, cache: bool) -> np.ndarray:
         with cached_path.open('wb') as f:
             np.save(f, img)
     return img
+
+
+def make_loader(dataset_cls: type,
+                args, paths: List[Path], coords: pd.DataFrame,
+                deterministic: bool=False) -> DataLoader:
+    dataset = dataset_cls(
+        img_paths=paths,
+        coords=coords,
+        size=args.patch_size,
+        transform=img_transform,
+        deterministic=deterministic,
+    )
+    return DataLoader(
+        dataset=dataset,
+        shuffle=True,
+        num_workers=args.workers,
+        batch_size=args.batch_size,
+    )
 
 
 def write_event(log, step: int, **data):
@@ -82,10 +107,9 @@ class BaseDataset(Dataset):
                  coords: pd.DataFrame,
                  ):
         self.img_ids = [int(p.name.split('.')[0]) for p in img_paths]
-        tq_img_paths = tqdm.tqdm(img_paths, desc='Images')
         self.imgs = {img_id: load_image(p, cache=True)
-                     for img_id, p in zip(self.img_ids, tq_img_paths)}
-        tq_img_paths.close()
+                     for img_id, p in tqdm.tqdm(list(zip(self.img_ids, img_paths)),
+                                                desc='Images')}
         self.coords = coords.loc[self.img_ids].dropna()
 
 
@@ -130,7 +154,8 @@ def train(args, model: nn.Module, criterion, *, train_loader, valid_loader):
             for i, (inputs, targets) in enumerate(tl):
                 inputs, targets = variable(inputs), variable(targets)
                 outputs = model(inputs)
-                outputs = outputs.view(outputs.size(0), -1)
+                if len(targets.size()) == 1:
+                    outputs = outputs.view(outputs.size(0), -1)
                 loss = criterion(outputs, targets)
                 optimizer.zero_grad()
                 batch_size = inputs.size(0)

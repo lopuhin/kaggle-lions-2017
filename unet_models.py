@@ -57,7 +57,7 @@ class UNet(nn.Module):
             if i != 0:
                 self.up.append(self.module(low_nf + nf, low_nf))
                 setattr(self, 'conv_up_{}'.format(i), self.up[-1])
-        self.conv_final = nn.Conv2d(filter_sizes[0], N_CLASSES, 1)
+        self.conv_final = nn.Conv2d(filter_sizes[0], N_CLASSES + 1, 1)
 
     def forward(self, x):
         xs = []

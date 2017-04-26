@@ -5,6 +5,7 @@ Pillow==4.1.0
 scikit-image==0.13.0
 scikit-learn==0.18.1
 scipy==0.19.0
+Shapely==1.5.17.post1
 torch==0.1.11+b13b701
 torchvision==0.1.8
 tqdm==4.11.2

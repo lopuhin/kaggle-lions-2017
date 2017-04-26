@@ -8,15 +8,16 @@ from typing import List
 
 import pandas as pd
 import numpy as np
+from shapely.geometry import Point
+from shapely.affinity import rotate
 import skimage.transform
 import skimage.io
+import torch
 from torch import nn
-from torch.utils.data import DataLoader
-from torchvision.transforms import Compose, ToTensor, Normalize
 
 from utils import (
     N_CLASSES, cuda, load_coords, train_valid_split, train, validation,
-    BaseDataset
+    BaseDataset, make_loader,
 )
 from unet_models import UNet
 
@@ -26,22 +27,20 @@ class SegmentationDataset(BaseDataset):
                  img_paths: List[Path],
                  coords: pd.DataFrame,
                  transform,
-                 patch_size: int,
-                 mask_r: int=16,
+                 size: int,
+                 mark_r: int=8,
                  debug: bool=False,
                  deterministic: bool=False,
                  ):
         super().__init__(img_paths, coords)
-        self.patch_size = patch_size
-        self.mark_r = mask_r
+        self.patch_size = size
+        self.mark_r = mark_r
         self.transform = transform
         self.debug = debug
         self.deterministic = deterministic
-        self.to_tensor = ToTensor()
 
     def __getitem__(self, idx):
-        if self.deterministic:
-            random.seed(idx)
+        random.seed(idx if self.deterministic else None)
         img_id = self.img_ids[idx % len(self.img_ids)]
         img = self.imgs[img_id]
         max_y, max_x = img.shape[:2]
@@ -50,32 +49,41 @@ class SegmentationDataset(BaseDataset):
         x, y = (random.randint(b, max_x - (b + s)),
                 random.randint(b, max_y - (b + s)))
         patch = img[y: y + 2 * b + s, x: x + 2 * b + s]
-        mask = np.zeros_like(patch, dtype=np.int32)
-        mask[:] = N_CLASSES
-        coords = self.coords.loc[img_id]
-        # TODO - check that this loop is not too slow
+        try:
+            coords = self.coords.loc[[img_id]]
+        except KeyError:
+            coords = []
+        # TODO - sample a point close to some lion with non-zero prob
+        # TODO - check that this loop is not too slow, can be vectorized
         any_lions = False
+        angle = random.random() * 360
+        patch = skimage.transform.rotate(patch, angle, preserve_range=True)
+        mask = np.zeros(patch.shape[:2], dtype=np.int64)
+        mask[:] = N_CLASSES
+        nneg = lambda x: max(0, x)
+        c = b + s // 2
         for i in range(len(coords)):
             item = coords.iloc[i]
             ix, iy = item.col - x, item.row - y
-            if (0 >= ix <= 2 * b + s) and (0 >= iy <= 2 * b + s):
-                mask[max(0, iy - self.mark_r): iy + self.mark_r,
-                     max(0, ix - self.mark_r): ix + self.mark_r] = item.cls
+            if (0 <= ix <= 2 * b + s) and (0 <= iy <= 2 * b + s):
+                p = rotate(Point(ix, iy), -angle, origin=(c, c))
+                ix, iy = int(p.x), int(p.y)
+                mask[nneg(iy - self.mark_r): nneg(iy + self.mark_r),
+                     nneg(ix - self.mark_r): nneg(ix + self.mark_r)] = item.cls
                 any_lions = True
-        angle = random.random() * 360
-        patch = skimage.transform.rotate(patch, angle, preserve_range=True)
-        mask = skimage.transform.rotate(mask, angle, preserve_range=True)
         patch = patch[b:, b:][:s, :s]
         mask = mask[b:, b:][:s, :s]
         if random.random() < 0.5:
             patch = np.flip(patch, axis=1).copy()
             mask = np.flip(mask, axis=1).copy()
-        assert patch.shape == mask.shape == (s, s, 3), (patch.shape, mask.shape)
-        if any_lions and self.debug:
-            # TODO - check
-            skimage.io.imsave('patch.jpg', patch)
-            skimage.io.imsave('mask.jpg', mask * 255 / N_CLASSES)
-        return self.transform(patch), self.to_tensor(mask)
+        assert patch.shape == (s, s, 3), patch.shape
+        assert mask.shape == (s, s), mask.shape
+        if self.debug and any_lions:
+            for cls in range(N_CLASSES):
+                skimage.io.imsave('mask-{}.jpg'.format(cls),
+                                  (mask == cls).astype(np.float32))
+            skimage.io.imsave('patch.jpg', patch / 255)
+        return self.transform(patch), torch.from_numpy(mask)
 
     def __len__(self):
         patch_area = self.patch_size ** 2
@@ -83,33 +91,11 @@ class SegmentationDataset(BaseDataset):
                        for img in self.imgs.values()))
 
 
-def make_loader(args, paths: List[Path], coords: pd.DataFrame,
-                deterministic: bool=False) -> DataLoader:
-    transform = Compose([
-        ToTensor(),
-        # TODO - check actual values
-        Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]),
-    ])
-    dataset = SegmentationDataset(
-        img_paths=paths,
-        coords=coords,
-        patch_size=args.patch_size,
-        transform=transform,
-        deterministic=deterministic,
-    )
-    return DataLoader(
-        dataset=dataset,
-        shuffle=True,
-        num_workers=args.workers,
-        batch_size=args.batch_size,
-    )
-
-
 def main():
     parser = argparse.ArgumentParser()
     arg = parser.add_argument
     arg('root', help='checkpoint root')
-    arg('--batch-size', type=int, default=4)
+    arg('--batch-size', type=int, default=32)
     arg('--patch-size', type=int, default=256)
     arg('--n-epochs', type=int, default=100)
     arg('--lr', type=float, default=0.0001)
@@ -120,13 +106,15 @@ def main():
         default='train')
     arg('--clean', action='store_true')
     arg('--epoch-size', type=int)
+    arg('--limit', type=int, help='Use only N images for train/valid')
     args = parser.parse_args()
 
     coords = load_coords()
     train_paths, valid_paths = train_valid_split(args)
     train_loader, valid_loader = (
-        make_loader(args, train_paths, coords),
-        make_loader(args, valid_paths, coords, deterministic=True))
+        make_loader(SegmentationDataset, args, train_paths, coords),
+        make_loader(SegmentationDataset, args, valid_paths, coords,
+                    deterministic=True))
 
     root = Path(args.root)
     model = UNet()
