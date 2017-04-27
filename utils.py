@@ -16,7 +16,7 @@ import pandas as pd
 import numpy as np
 import skimage.io
 import skimage.exposure
-from sklearn.model_selection import ShuffleSplit
+from sklearn.model_selection import KFold
 import torch
 from torch import nn
 from torch.autograd import Variable
@@ -93,7 +93,7 @@ def train_valid_split(args) -> Tuple[List[Path], List[Path]]:
         random.seed(42)
         img_paths = random.sample(img_paths, args.limit)
     img_paths = np.array(sorted(img_paths))
-    cv_split = ShuffleSplit(n_splits=args.n_folds, random_state=42)
+    cv_split = KFold(n_splits=args.n_folds, shuffle=True, random_state=42)
     img_folds = list(cv_split.split(img_paths))
     train_ids, valid_ids = img_folds[args.fold - 1]
     return img_paths[train_ids], img_paths[valid_ids]
