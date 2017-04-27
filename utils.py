@@ -7,12 +7,15 @@ from pprint import pprint
 import random
 import shutil
 from typing import Dict, List, Tuple
+import warnings
 
 import matplotlib.pyplot as plt
 
 import cv2
 import pandas as pd
 import numpy as np
+import skimage.io
+import skimage.exposure
 from sklearn.model_selection import ShuffleSplit
 import torch
 from torch import nn
@@ -139,7 +142,8 @@ def train(args, model: nn.Module, criterion, *, train_loader, valid_loader):
     }, str(model_path))
 
     report_each = 10
-    log = Path(args.root).joinpath('train.log').open('at', encoding='utf8')
+    root = Path(args.root)
+    log = root.joinpath('train.log').open('at', encoding='utf8')
     for epoch in range(epoch, args.n_epochs + 1):
         model.train()
         tq = tqdm.tqdm(total=(args.epoch_size or
@@ -154,7 +158,8 @@ def train(args, model: nn.Module, criterion, *, train_loader, valid_loader):
             for i, (inputs, targets) in enumerate(tl):
                 inputs, targets = variable(inputs), variable(targets)
                 outputs = model(inputs)
-                if len(targets.size()) == 1:
+                is_classifier = len(targets.size()) == 1
+                if is_classifier:
                     outputs = outputs.view(outputs.size(0), -1)
                 loss = criterion(outputs, targets)
                 optimizer.zero_grad()
@@ -168,6 +173,8 @@ def train(args, model: nn.Module, criterion, *, train_loader, valid_loader):
                 tq.set_postfix(loss='{:.3f}'.format(mean_loss))
                 if i and i % report_each == 0:
                     write_event(log, step, loss=mean_loss)
+                    if not is_classifier:
+                        save_predictions(root, inputs, targets, outputs)
             write_event(log, step, loss=mean_loss)
             tq.close()
             save(epoch + 1)
@@ -183,6 +190,50 @@ def train(args, model: nn.Module, criterion, *, train_loader, valid_loader):
             save(epoch)
             print('done.')
             return
+
+
+def save_predictions(root: Path, inputs, targets, outputs):
+    batch_size = inputs.size(0)
+    inputs_data = inputs.data.cpu().numpy().transpose([0, 2, 3, 1])
+    outputs_data = outputs.data.cpu().numpy()
+    targets_data = targets.data.cpu().numpy()
+    outputs_probs = np.exp(outputs_data)
+    for i in range(batch_size):
+        prefix = str(root.joinpath(str(i).zfill(2)))
+        save_image(
+            '{}-input.jpg'.format(prefix),
+            skimage.exposure.rescale_intensity(inputs_data[i], out_range=(0, 1)))
+        save_image(
+            '{}-output.jpg'.format(prefix), colored_prediction(outputs_probs[i]))
+        target_one_hot = np.stack([targets_data[i] == cls for cls in range(N_CLASSES)])
+        save_image(
+            '{}-target.jpg'.format(prefix),
+            colored_prediction(target_one_hot.astype(np.float32)))
+
+
+def colored_prediction(prediction: np.ndarray) -> np.ndarray:
+    colors = [
+        [1., 0., 0.],  # red: adult males
+        [1., 0., 1.],  # magenta: subadult males
+        [0.647, 0.1647, 0.1647],  # brown: adult females
+        [0., 0., 1.],  # blue: juveniles
+        [0., 1., 0.],  # green: pups
+    ]
+    h, w = prediction.shape[1:]
+    planes = []
+    for cls, color in enumerate(colors):
+        plane = np.rollaxis(np.array(color * h * w).reshape(h, w, 3), 2)
+        plane *= prediction[cls]
+        planes.append(plane)
+    colored = np.sum(planes, axis=0)
+    colored = np.clip(colored, 0, 1)
+    return colored.transpose(1, 2, 0)
+
+
+def save_image(fname, data):
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        skimage.io.imsave(fname, data)
 
 
 def validation(model: nn.Module, criterion, valid_loader) -> Dict[str, float]:
