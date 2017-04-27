@@ -101,6 +101,7 @@ def main():
     arg('--lr', type=float, default=0.0001)
     arg('--workers', type=int, default=2)
     arg('--fold', type=int, default=1)
+    arg('--nol-weight', type=float, default=1.0)
     arg('--n-folds', type=int, default=5)
     arg('--mode', choices=['train', 'validation', 'predict'],
         default='train')
@@ -119,7 +120,9 @@ def main():
     root = Path(args.root)
     model = UNet()
     model = cuda(model)
-    criterion = nn.NLLLoss2d()
+    class_weights = torch.ones(N_CLASSES + 1)
+    class_weights[N_CLASSES] = args.nol_weight
+    criterion = nn.NLLLoss2d(weight=cuda(class_weights))
     if args.mode == 'train':
         if root.exists() and args.clean:
             shutil.rmtree(str(root))
