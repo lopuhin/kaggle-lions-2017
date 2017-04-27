@@ -1,27 +1,22 @@
-- why is cnn_baseline so poor:
-  - shallow water looks poor due to few negatives
-  - model is very sensitive to precise position - FCN seems to miss a lot
-  - neg-5 model might need more training
+- check missing labels during training - are they missing in dotted images?
+- check MismatchedTrainImages.txt - are they in coords?
 
-misc:
-- multithreaded dataloader
+prediction:
+- finish current approach with integrating
+- try thresholds + counting connected components
 
-dumb baseline:
-- predict on small patches
-- determine image scale (maybe skip?)
-- estimate count based on the number of positive patches (or something like this)
+UNet training:
+- better way to monitor progress - loss only on other classes?
+- try dice loss (maybe modify it - pos/neg weights, square size)
+- try to separate close lions to count them
+- determine image scale, rescale
 
-UNet:
-- train log loss longer, try giving less weight to no lion class
-- change loss:
-  - add dice, maybe modify it (pos/neg weights, square size)
-- separate models for different classes?
+performance:
+- prediction speed! parallelize, maybe make FCN UNet
+- multi-threaded data loader to train at full speed on full dataset
 
-"proper" pipeline ideas:
-- ???
-- detector that works for all classes
-- how to separate close entries - should be solved?
-- check SOTA detection models again
+other ideas:
+- check SOTA detection models - SSD, any other?
 
 later:
 - check quality of coordinates carefully on all images
