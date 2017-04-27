@@ -255,6 +255,11 @@ def load_best_model(model: nn.Module, root: Path) -> None:
     print('Loaded model from epoch {epoch}, step {step:,}'.format(**state))
 
 
+def batches(lst, n):
+    for i in range(0, len(lst), n):
+        yield lst[i: i + n]
+
+
 def plot(*args, ymin=None, ymax=None, xmin=None, xmax=None, params=False,
          max_points=200):
     """ Use in the notebook like this:

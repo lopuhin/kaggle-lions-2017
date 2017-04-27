@@ -14,15 +14,13 @@ import skimage.transform
 import skimage.io
 import torch
 from torch import nn
+import tqdm
 
-from utils import (
-    N_CLASSES, cuda, load_coords, train_valid_split, train, validation,
-    BaseDataset, make_loader,
-)
+import utils
 from unet_models import UNet
 
 
-class SegmentationDataset(BaseDataset):
+class SegmentationDataset(utils.BaseDataset):
     def __init__(self,
                  img_paths: List[Path],
                  coords: pd.DataFrame,
@@ -59,7 +57,7 @@ class SegmentationDataset(BaseDataset):
         angle = random.random() * 360
         patch = skimage.transform.rotate(patch, angle, preserve_range=True)
         mask = np.zeros(patch.shape[:2], dtype=np.int64)
-        mask[:] = N_CLASSES
+        mask[:] = utils.N_CLASSES
         nneg = lambda x: max(0, x)
         c = b + s // 2
         for i in range(len(coords)):
@@ -79,7 +77,7 @@ class SegmentationDataset(BaseDataset):
         assert patch.shape == (s, s, 3), patch.shape
         assert mask.shape == (s, s), mask.shape
         if self.debug and any_lions:
-            for cls in range(N_CLASSES):
+            for cls in range(utils.N_CLASSES):
                 skimage.io.imsave('mask-{}.jpg'.format(cls),
                                   (mask == cls).astype(np.float32))
             skimage.io.imsave('patch.jpg', patch / 255)
@@ -89,6 +87,32 @@ class SegmentationDataset(BaseDataset):
         patch_area = self.patch_size ** 2
         return int(sum(img.shape[0] * img.shape[1] / patch_area
                        for img in self.imgs.values()))
+
+
+def predict(model, img_paths: List[Path], out_path: Path, patch_size: int):
+    model.eval()
+    s = patch_size
+    for img_path in tqdm.tqdm(img_paths):
+        img = utils.load_image(img_path, cache=False)
+        h, w = img.shape[:2]
+        step = s // 2
+        xs = list(range(0, w - s, step)) + [w - s]
+        ys = list(range(0, h - s, step)) + [h - s]
+        all_xy = [(x, y) for x in xs for y in ys]
+        pred_img = np.zeros((utils.N_CLASSES + 1, h, w), dtype=np.float32)
+        pred_count = np.zeros((h, w), dtype=np.int32)
+        for xy_batch in tqdm.tqdm(list(utils.batches(all_xy, 64))):
+            inputs = torch.stack(
+                [utils.img_transform(img[y: y + s, x: x + s]) for x, y in xy_batch])
+            outputs = model(utils.variable(inputs, volatile=True))
+            outputs_data = np.exp(outputs.data.cpu().numpy())
+            for (x, y), pred in zip(xy_batch, outputs_data):
+                pred_img[:, y: y + s, x: x + s] += pred
+                pred_count[y: y + s, x: x + s] += 1
+        pred_img /= np.maximum(pred_count, 1)
+        # TODO - binarize and compress
+        np.save(str(out_path / '{}-pred.npy'.format(img_path.stem)),
+                pred_img)
 
 
 def main():
@@ -103,39 +127,40 @@ def main():
     arg('--fold', type=int, default=1)
     arg('--nol-weight', type=float, default=1.0)
     arg('--n-folds', type=int, default=5)
-    arg('--mode', choices=['train', 'validation', 'predict'],
+    arg('--mode', choices=['train', 'validation', 'predict_valid'],
         default='train')
     arg('--clean', action='store_true')
     arg('--epoch-size', type=int)
     arg('--limit', type=int, help='Use only N images for train/valid')
     args = parser.parse_args()
 
-    coords = load_coords()
-    train_paths, valid_paths = train_valid_split(args)
-    train_loader, valid_loader = (
-        make_loader(SegmentationDataset, args, train_paths, coords),
-        make_loader(SegmentationDataset, args, valid_paths, coords,
-                    deterministic=True))
-
+    coords = utils.load_coords()
+    train_paths, valid_paths = utils.train_valid_split(args)
     root = Path(args.root)
     model = UNet()
-    model = cuda(model)
-    class_weights = torch.ones(N_CLASSES + 1)
-    class_weights[N_CLASSES] = args.nol_weight
-    criterion = nn.NLLLoss2d(weight=cuda(class_weights))
+    model = utils.cuda(model)
+    class_weights = torch.ones(utils.N_CLASSES + 1)
+    class_weights[utils.N_CLASSES] = args.nol_weight
+    criterion = nn.NLLLoss2d(weight=utils.cuda(class_weights))
     if args.mode == 'train':
+        train_loader, valid_loader = (
+            utils.make_loader(SegmentationDataset, args, train_paths, coords),
+            utils.make_loader(SegmentationDataset, args, valid_paths, coords,
+                              deterministic=True))
         if root.exists() and args.clean:
             shutil.rmtree(str(root))
         root.mkdir(exist_ok=True)
         root.joinpath('params.json').write_text(json.dumps(vars(args)))
-        train(args, model, criterion,
+        utils.train(args, model, criterion,
               train_loader=train_loader, valid_loader=valid_loader)
     elif args.mode == 'validation':
-        validation(model, criterion, valid_loader)
-    elif args.mode == 'predict':
-        # TODO
-        # predict(model, valid_loader, out_path=root)
-        parser.error('TODO')
+        utils.load_best_model(model, root)
+        valid_loader = utils.make_loader(
+            SegmentationDataset, args, valid_paths, coords, deterministic=True)
+        utils.validation(model, criterion, valid_loader)
+    elif args.mode == 'predict_valid':
+        utils.load_best_model(model, root)
+        predict(model, valid_paths, out_path=root, patch_size=args.patch_size)
     else:
         parser.error('Unexpected mode {}'.format(args.mode))
 
