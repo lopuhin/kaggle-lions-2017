@@ -189,7 +189,7 @@ def main():
                 if p not in train_paths]
             predict(model, valid_paths, out_path=root, patch_size=args.patch_size)
         elif args.mode == 'predict_test':
-            test_paths = list(utils.DATA_ROOT.joinpath('Train').glob('*.jpg'))
+            test_paths = list(utils.DATA_ROOT.joinpath('Test').glob('*.jpg'))
             out_path = root.joinpath('test')
             out_path.mkdir(exist_ok=True)
             predict(model, test_paths, out_path, patch_size=args.patch_size)
