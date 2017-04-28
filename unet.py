@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import argparse
+import gzip
 import json
 from pathlib import Path
 import random
@@ -91,28 +92,46 @@ class SegmentationDataset(utils.BaseDataset):
 
 def predict(model, img_paths: List[Path], out_path: Path, patch_size: int):
     model.eval()
-    s = patch_size
-    for img_path in tqdm.tqdm(img_paths):
-        img = utils.load_image(img_path, cache=False)
+
+    def predict(arg):
+        img_path, img = arg
         h, w = img.shape[:2]
-        step = s // 2
+        s = patch_size
+        step = s + 32  # // 2
         xs = list(range(0, w - s, step)) + [w - s]
         ys = list(range(0, h - s, step)) + [h - s]
         all_xy = [(x, y) for x in xs for y in ys]
         pred_img = np.zeros((utils.N_CLASSES + 1, h, w), dtype=np.float32)
         pred_count = np.zeros((h, w), dtype=np.int32)
-        for xy_batch in tqdm.tqdm(list(utils.batches(all_xy, 64))):
-            inputs = torch.stack(
-                [utils.img_transform(img[y: y + s, x: x + s]) for x, y in xy_batch])
+
+        def make_batch(xy_batch_):
+            return (xy_batch_, torch.stack([
+                utils.img_transform(img[y: y + s, x: x + s]) for x, y in xy_batch_]))
+
+        for xy_batch, inputs in utils.imap_fixed_output_buffer(
+                make_batch, tqdm.tqdm(list(utils.batches(all_xy, 64))),
+                threads=1):
             outputs = model(utils.variable(inputs, volatile=True))
             outputs_data = np.exp(outputs.data.cpu().numpy())
             for (x, y), pred in zip(xy_batch, outputs_data):
                 pred_img[:, y: y + s, x: x + s] += pred
                 pred_count[y: y + s, x: x + s] += 1
         pred_img /= np.maximum(pred_count, 1)
-        # TODO - binarize and compress
-        np.save(str(out_path / '{}-pred.npy'.format(img_path.stem)),
-                pred_img)
+        return img_path, pred_img
+
+    predictions = map(
+        predict,
+        utils.imap_fixed_output_buffer(
+            lambda p: (p, utils.load_image(p, cache=False)),
+            tqdm.tqdm(img_paths),
+            threads=2))
+
+    for img_path, pred_img in utils.imap_fixed_output_buffer(
+            lambda _: next(predictions), img_paths, threads=1):
+        binarized = (pred_img * 1000).astype(np.uint16)
+        with gzip.open(str(out_path / '{}-pred.npy'.format(img_path.stem)), 'wb',
+                           compresslevel=4) as f:
+            np.save(f, binarized)
 
 
 def main():
@@ -127,7 +146,8 @@ def main():
     arg('--fold', type=int, default=1)
     arg('--nol-weight', type=float, default=1.0)
     arg('--n-folds', type=int, default=5)
-    arg('--mode', choices=['train', 'validation', 'predict_valid'],
+    arg('--mode', choices=[
+        'train', 'validation', 'predict_valid', 'predict_test', 'predict_all_valid'],
         default='train')
     arg('--clean', action='store_true')
     arg('--epoch-size', type=int)
@@ -153,16 +173,28 @@ def main():
         root.joinpath('params.json').write_text(json.dumps(vars(args)))
         utils.train(args, model, criterion,
               train_loader=train_loader, valid_loader=valid_loader)
-    elif args.mode == 'validation':
-        utils.load_best_model(model, root)
-        valid_loader = utils.make_loader(
-            SegmentationDataset, args, valid_paths, coords, deterministic=True)
-        utils.validation(model, criterion, valid_loader)
-    elif args.mode == 'predict_valid':
-        utils.load_best_model(model, root)
-        predict(model, valid_paths, out_path=root, patch_size=args.patch_size)
     else:
-        parser.error('Unexpected mode {}'.format(args.mode))
+        utils.load_best_model(model, root)
+        if args.mode == 'validation':
+            valid_loader = utils.make_loader(
+                SegmentationDataset, args, valid_paths, coords, deterministic=True)
+            utils.validation(model, criterion, valid_loader)
+        elif args.mode == 'predict_valid':
+            predict(model, valid_paths, out_path=root, patch_size=args.patch_size)
+        elif args.mode == 'predict_all_valid':
+            # include all paths we did not train on (makes sense only with --limit)
+            train_paths = set(train_paths)
+            valid_paths = list(valid_paths) + [
+                p for p in utils.DATA_ROOT.joinpath('Train').glob('*.jpg')
+                if p not in train_paths]
+            predict(model, valid_paths, out_path=root, patch_size=args.patch_size)
+        elif args.mode == 'predict_test':
+            test_paths = list(utils.DATA_ROOT.joinpath('Train').glob('*.jpg'))
+            out_path = root.joinpath('test')
+            out_path.mkdir(exist_ok=True)
+            predict(model, test_paths, out_path, patch_size=args.patch_size)
+        else:
+            parser.error('Unexpected mode {}'.format(args.mode))
 
 
 if __name__ == '__main__':

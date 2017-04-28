@@ -1,3 +1,4 @@
+from concurrent.futures import ThreadPoolExecutor
 import json
 from datetime import datetime
 import glob
@@ -258,6 +259,19 @@ def load_best_model(model: nn.Module, root: Path) -> None:
 def batches(lst, n):
     for i in range(0, len(lst), n):
         yield lst[i: i + n]
+
+
+def imap_fixed_output_buffer(fn, it, threads: int):
+    with ThreadPoolExecutor(max_workers=threads) as executor:
+        futures = []
+        max_futures = threads + 1
+        for x in it:
+            while len(futures) >= max_futures:
+                future, futures = futures[0], futures[1:]
+                yield future.result()
+            futures.append(executor.submit(fn, x))
+        for future in futures:
+            yield future.result()
 
 
 def plot(*args, ymin=None, ymax=None, xmin=None, xmax=None, params=False,
