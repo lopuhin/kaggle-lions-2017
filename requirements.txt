@@ -9,3 +9,4 @@ Shapely==1.5.17.post1
 torch==0.1.11+b13b701
 torchvision==0.1.8
 tqdm==4.11.2
+xgboost==0.6a2

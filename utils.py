@@ -2,6 +2,7 @@ from concurrent.futures import ThreadPoolExecutor
 import json
 from datetime import datetime
 import glob
+import gzip
 from itertools import islice
 from pathlib import Path
 from pprint import pprint
@@ -57,6 +58,11 @@ def load_image(path: Path, *, cache: bool) -> np.ndarray:
         with cached_path.open('wb') as f:
             np.save(f, img)
     return img
+
+
+def load_pred(path: Path) -> np.ndarray:
+    with gzip.open(str(path), 'rb') as f:
+        return np.load(f).astype(np.float32) / 1000
 
 
 def labeled_paths() -> List[Path]:
