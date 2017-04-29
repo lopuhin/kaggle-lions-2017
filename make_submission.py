@@ -112,8 +112,6 @@ def main():
     args = parser.parse_args()
 
     model_path = args.root.joinpath('regressor.joblib')  # type: Path
-    train_features_path = args.root.joinpath('features.npz')  # type: Path
-
     if args.mode == 'train':
         _, xs, ys = load_all_features(args.root, only_vald=True)
         evaluate_stacked(
