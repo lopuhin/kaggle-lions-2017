@@ -6,8 +6,10 @@ from pathlib import Path
 from typing import Tuple, List
 import warnings
 
+import cv2
 import numpy as np
 import pandas as pd
+from skimage.feature import blob_log
 from sklearn.base import clone
 from sklearn.ensemble import ExtraTreesRegressor
 from sklearn.externals import joblib
@@ -32,18 +34,29 @@ def load_xs_ys(pred_path: Path, coords: pd.DataFrame, thresholds=(0.02, 0.25),
             ys.append((coords.loc[img_id].cls == cls).sum())
         except KeyError:
             ys.append(0)
-        cls_pred = pred[cls]
+        cls_pred = downsample(pred[cls])
         x = [cls_pred.sum()]
         for i, threshold in enumerate(thresholds):
             bin_mask = cls_pred > threshold
             if i + 1 < len(thresholds):
                 bin_mask &= cls_pred < thresholds[i + 1]
             x.append(bin_mask.sum())
+        for blob_threshold in [0.02, 0.04]:
+            blobs = blob_log(cls_pred, threshold=blob_threshold,
+                             min_sigma=1, max_sigma=4, num_sigma=4)
+            x.append(len(blobs))
         xs.append(x)
     return np.array(xs), np.array(ys)
 
 
-def load_all_features(root: Path, only_vald: bool,
+def downsample(img: np.ndarray, ratio: int=4) -> np.ndarray:
+    h, w = img.shape[:2]
+    h = int(h / ratio)
+    w = int(w / ratio)
+    return cv2.resize(img, (h, w))
+
+
+def load_all_features(root: Path, only_vald: bool, args,
                       ) -> Tuple[List[int], np.ndarray, np.ndarray]:
     features_path = root.joinpath('features.npz')  # type: Path
     coords = utils.load_coords()
@@ -52,8 +65,10 @@ def load_all_features(root: Path, only_vald: bool,
     if only_vald:
         valid_ids = {int(p.stem) for p in utils.labeled_paths()}
         pred_paths = [p for p in pred_paths if get_id(p) in valid_ids]
+    if args.limit:
+        pred_paths = pred_paths[:args.limit]
     ids = [get_id(p) for p in pred_paths]
-    if features_path.exists():
+    if not args.new_features and features_path.exists():
         data = np.load(str(features_path))
         assert len(data['ys'][0]) == len(ids), (len(data['ys'][0]), len(ids))
         return ids, data['xs'], data['ys']
@@ -111,11 +126,13 @@ def main():
     arg('mode', choices=['train', 'predict'])
     arg('--concat-features', action='store_true')
     arg('--predict-train', action='store_true')
+    arg('--limit', type=int)
+    arg('--new-features', action='store_true')
     args = parser.parse_args()
 
     model_path = args.root.joinpath('regressor.joblib')  # type: Path
     if args.mode == 'train':
-        _, xs, ys = load_all_features(args.root, only_vald=True)
+        _, xs, ys = load_all_features(args.root, only_vald=True, args=args)
         train(xs, ys,
               ExtraTreesRegressor(n_estimators=50),
               XGBRegressor(n_estimators=50, max_depth=2),
@@ -125,10 +142,10 @@ def main():
               )
     elif args.mode == 'predict':
         if args.predict_train:
-            ids, all_xs, _ = load_all_features(args.root, only_vald=True)
+            ids, all_xs, _ = load_all_features(args.root, only_vald=True, args=args)
         else:
             ids, all_xs, _ = load_all_features(
-                args.root.joinpath('test'), only_vald=False)
+                args.root.joinpath('test'), only_vald=False, args=args)
         all_regs = joblib.load(model_path)
         concated_xs = np.concatenate(all_xs, axis=1)
         classes = [
