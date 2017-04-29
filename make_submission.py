@@ -3,7 +3,7 @@ import argparse
 from functools import partial
 import multiprocessing.pool
 from pathlib import Path
-from typing import Tuple
+from typing import Tuple, List
 import warnings
 
 import numpy as np
@@ -22,11 +22,8 @@ from xgboost import XGBRegressor
 import utils
 
 
-XsYs = Tuple[np.ndarray, np.ndarray]
-
-
 def load_xs_ys(pred_path: Path, coords: pd.DataFrame, thresholds=(0.02, 0.25),
-               ) -> XsYs:
+               ) -> Tuple[np.ndarray, np.ndarray]:
     pred = utils.load_pred(pred_path)
     img_id = int(pred_path.name.split('-')[0])
     xs, ys = [], []
@@ -46,29 +43,37 @@ def load_xs_ys(pred_path: Path, coords: pd.DataFrame, thresholds=(0.02, 0.25),
     return np.array(xs), np.array(ys)
 
 
-def load_all_features(root: Path, only_vald: bool) -> XsYs:
+def load_all_features(root: Path, only_vald: bool,
+                      ) -> Tuple[List[int], np.ndarray, np.ndarray]:
+    features_path = root.joinpath('features.npz')  # type: Path
     coords = utils.load_coords()
     pred_paths = list(root.glob('*-pred.npy'))
+    get_id = lambda p: int(p.name.split('-')[0])
     if only_vald:
         valid_ids = {int(p.stem) for p in utils.labeled_paths()}
-        pred_paths = [p for p in pred_paths
-                      if int(p.name.split('-')[0]) in valid_ids]
+        pred_paths = [p for p in pred_paths if get_id(p) in valid_ids]
+    ids = [get_id(p) for p in pred_paths]
+    if features_path.exists():
+        data = np.load(str(features_path))
+        assert len(data['ys'][0]) == len(ids), (len(data['ys'][0]), len(ids))
+        return ids, data['xs'], data['ys']
     print('{} total'.format(len(pred_paths)))
     all_xs = [[] for _ in range(utils.N_CLASSES)]
     all_ys = [[] for _ in range(utils.N_CLASSES)]
     with multiprocessing.pool.ThreadPool(processes=16) as pool:
         for xs, ys in tqdm.tqdm(
-                pool.imap_unordered(partial(load_xs_ys, coords=coords),
-                                    pred_paths, chunksize=2),
+                pool.imap(partial(load_xs_ys, coords=coords), pred_paths),
                 total=len(pred_paths)):
             for cls in range(utils.N_CLASSES):
                 all_xs[cls].append(xs[cls])
                 all_ys[cls].append(ys[cls])
-    return np.array(all_xs), np.array(all_ys)
+    xs, ys = np.array(all_xs), np.array(all_ys)
+    with features_path.open('wb') as f:
+        np.savez(f, xs=xs, ys=ys)
+    return ids, xs, ys
 
 
 def evaluate_stacked(all_xs, all_ys, *regs, save_to=None):
-    print()
     stacked_xs = np.concatenate(all_xs, axis=1)
     all_rmse = []
     regs_name = ', '.join(type(reg).__name__ for reg in regs)
@@ -76,8 +81,8 @@ def evaluate_stacked(all_xs, all_ys, *regs, save_to=None):
     for cls in range(utils.N_CLASSES):
         ys = all_ys[cls]
         xs = stacked_xs
-        preds = [cross_val_predict(reg, xs, ys, cv=5) for reg in regs]
-        pred = np.mean(preds, axis=0)
+        pred = average_predictions(
+            [cross_val_predict(reg, xs, ys, cv=5) for reg in regs])
         rmse = np.sqrt(metrics.mean_squared_error(ys, pred))
         print('cls {}, RMSE {:.2f}'.format(cls, rmse))
         all_rmse.append(np.mean(rmse))
@@ -94,6 +99,11 @@ def evaluate_stacked(all_xs, all_ys, *regs, save_to=None):
         print('Saved to', save_to)
 
 
+def average_predictions(preds: List[np.ndarray]) -> np.ndarray:
+    pred = np.mean(preds, axis=0)
+    return np.clip(pred, 0, None)
+
+
 def main():
     parser = argparse.ArgumentParser()
     arg = parser.add_argument
@@ -102,16 +112,10 @@ def main():
     args = parser.parse_args()
 
     model_path = args.root.joinpath('regressor.joblib')  # type: Path
-    features_path = args.root.joinpath('features.npz')  # type: Path
+    train_features_path = args.root.joinpath('features.npz')  # type: Path
 
     if args.mode == 'train':
-        if features_path.exists():
-            data = np.load(str(features_path))
-            xs, ys = data['xs'], data['ys']
-        else:
-            xs, ys = load_all_features(args.root, only_vald=True)
-            with features_path.open('wb') as f:
-                np.savez(f, xs=xs, ys=ys)
+        _, xs, ys = load_all_features(args.root, only_vald=True)
         evaluate_stacked(
             xs, ys,
             ExtraTreesRegressor(n_estimators=50),
@@ -119,13 +123,18 @@ def main():
             Lasso(alpha=1.0, normalize=False, max_iter=100000),
             save_to=model_path)
     elif args.mode == 'predict':
-        all_xs, _ = load_all_features(args.root.joinpath('test'), only_vald=False)
+        ids, all_xs, _ = load_all_features(args.root.joinpath('test'), only_vald=False)
         all_regs = joblib.load(model_path)
         stacked_xs = np.concatenate(all_xs, axis=1)
-        for cls, cls_regs in enumerate(all_regs):
+        classes = [
+            'adult_males', 'subadult_males', 'adult_females', 'juveniles', 'pups']
+        all_preds = pd.DataFrame(index=ids, columns=classes)
+        for cls_name, cls_regs in zip(classes, all_regs):
             preds = [reg.predict(stacked_xs) for reg in cls_regs]
-            pred = np.mean(preds, axis=0)
-            # TODO
+            all_preds[cls_name] = average_predictions(preds)
+        out_path = args.root.joinpath(args.root.name + '.csv')
+        all_preds.to_csv(str(out_path), index_label='test_id')
+        print('Saved submission to {}'.format(out_path))
 
 
 if __name__ == '__main__':
