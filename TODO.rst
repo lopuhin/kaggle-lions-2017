@@ -19,7 +19,7 @@ other ideas:
 - check SOTA detection models - SSD, any other?
 
 later:
-- smart rounding (if it's required at all)
+- smart rounding
 - more features for count prediction:
   https://www.kaggle.com/andraszsom/noaa-fisheries-steller-sea-lion-population-count/predict-the-number-of-pups
 

@@ -73,14 +73,14 @@ def load_all_features(root: Path, only_vald: bool,
     return ids, xs, ys
 
 
-def evaluate_stacked(all_xs, all_ys, *regs, save_to=None):
-    stacked_xs = np.concatenate(all_xs, axis=1)
+def train(all_xs, all_ys, *regs, save_to=None, concat_features=False):
+    concated_xs = np.concatenate(all_xs, axis=1)
     all_rmse = []
     regs_name = ', '.join(type(reg).__name__ for reg in regs)
     fitted_regs = []
     for cls in range(utils.N_CLASSES):
         ys = all_ys[cls]
-        xs = stacked_xs
+        xs = concated_xs if concat_features else all_xs[cls]
         pred = average_predictions(
             [cross_val_predict(reg, xs, ys, cv=5) for reg in regs])
         rmse = np.sqrt(metrics.mean_squared_error(ys, pred))
@@ -101,7 +101,7 @@ def evaluate_stacked(all_xs, all_ys, *regs, save_to=None):
 
 def average_predictions(preds: List[np.ndarray]) -> np.ndarray:
     pred = np.mean(preds, axis=0)
-    return np.clip(pred, 0, None)
+    return np.clip(pred, 0, None).round().astype(np.int32)
 
 
 def main():
@@ -109,26 +109,34 @@ def main():
     arg = parser.add_argument
     arg('root', type=Path)
     arg('mode', choices=['train', 'predict'])
+    arg('--concat-features', action='store_true')
+    arg('--predict-train', action='store_true')
     args = parser.parse_args()
 
     model_path = args.root.joinpath('regressor.joblib')  # type: Path
     if args.mode == 'train':
         _, xs, ys = load_all_features(args.root, only_vald=True)
-        evaluate_stacked(
-            xs, ys,
-            ExtraTreesRegressor(n_estimators=50),
-            XGBRegressor(n_estimators=50, max_depth=2),
-            Lasso(alpha=1.0, normalize=False, max_iter=100000),
-            save_to=model_path)
+        train(xs, ys,
+              ExtraTreesRegressor(n_estimators=50),
+              XGBRegressor(n_estimators=50, max_depth=2),
+              Lasso(alpha=1.0, normalize=False, max_iter=100000),
+              save_to=model_path,
+              concat_features=args.concat_features,
+              )
     elif args.mode == 'predict':
-        ids, all_xs, _ = load_all_features(args.root.joinpath('test'), only_vald=False)
+        if args.predict_train:
+            ids, all_xs, _ = load_all_features(args.root, only_vald=True)
+        else:
+            ids, all_xs, _ = load_all_features(
+                args.root.joinpath('test'), only_vald=False)
         all_regs = joblib.load(model_path)
-        stacked_xs = np.concatenate(all_xs, axis=1)
+        concated_xs = np.concatenate(all_xs, axis=1)
         classes = [
             'adult_males', 'subadult_males', 'adult_females', 'juveniles', 'pups']
         all_preds = pd.DataFrame(index=ids, columns=classes)
-        for cls_name, cls_regs in zip(classes, all_regs):
-            preds = [reg.predict(stacked_xs) for reg in cls_regs]
+        for cls, (cls_name, cls_regs) in enumerate(zip(classes, all_regs)):
+            xs = concated_xs if args.concat_features else all_xs[cls]
+            preds = [reg.predict(xs) for reg in cls_regs]
             all_preds[cls_name] = average_predictions(preds)
         out_path = args.root.joinpath(args.root.name + '.csv')
         all_preds.to_csv(str(out_path), index_label='test_id')
