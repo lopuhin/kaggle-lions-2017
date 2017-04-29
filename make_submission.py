@@ -77,7 +77,8 @@ def load_all_features(root: Path, only_vald: bool, args,
     all_ys = [[] for _ in range(utils.N_CLASSES)]
     with multiprocessing.pool.ThreadPool(processes=16) as pool:
         for xs, ys in tqdm.tqdm(
-                pool.imap(partial(load_xs_ys, coords=coords), pred_paths),
+                pool.imap(partial(load_xs_ys, coords=coords), pred_paths,
+                          chunksize=2),
                 total=len(pred_paths)):
             for cls in range(utils.N_CLASSES):
                 all_xs[cls].append(xs[cls])

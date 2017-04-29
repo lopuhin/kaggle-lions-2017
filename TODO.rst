@@ -1,9 +1,6 @@
 - recheck missing labels during training - will they still be there?
 - stratified split by count - not sure?
 
-prediction:
-- try thresholds + counting connected components
-
 UNet training:
 - better way to monitor progress - loss only on other classes?
 - try dice loss (maybe modify it - pos/neg weights, square size)
@@ -11,7 +8,9 @@ UNet training:
 - determine image scale, rescale!
 
 performance:
+- generate features in parallel with test predictions
 - prediction speed - make more shallow? maybe make FCN UNet?
+- fit predictions into uint8, downscale 4x in UNet
 - multi-threaded data loader to train at full speed on full dataset
   (maybe training on 800 would be good enough?)
 
