@@ -1,5 +1,8 @@
-- check missing labels during training - are they missing in dotted images?
-- check MismatchedTrainImages.txt - are they in coords?
+- Finish predictions
+- don't use black areas in TrainDotted - they cover unlabeled lions
+  that would be false negatives during training
+- recheck missing labels during training - will they still be there?
+- stratified split by count - not sure?
 
 prediction:
 - finish current approach with integrating

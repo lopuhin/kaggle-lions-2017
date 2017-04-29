@@ -185,8 +185,7 @@ def main():
             # include all paths we did not train on (makes sense only with --limit)
             train_paths = set(train_paths)
             valid_paths = list(valid_paths) + [
-                p for p in utils.DATA_ROOT.joinpath('Train').glob('*.jpg')
-                if p not in train_paths]
+                p for p in utils.labeled_paths() if p not in train_paths]
             predict(model, valid_paths, out_path=root, patch_size=args.patch_size)
         elif args.mode == 'predict_test':
             test_paths = list(utils.DATA_ROOT.joinpath('Test').glob('*.jpg'))

@@ -48,7 +48,7 @@ img_transform = Compose([
 
 
 def load_image(path: Path, *, cache: bool) -> np.ndarray:
-    cached_path = path.parent.joinpath(path.stem + '.npy')  # type: Path
+    cached_path = path.parent / 'cache' / (path.stem + '.npy')  # type: Path
     if cache and cached_path.exists():
         return np.load(str(cached_path))
     img = cv2.imread(str(path))
@@ -57,6 +57,19 @@ def load_image(path: Path, *, cache: bool) -> np.ndarray:
         with cached_path.open('wb') as f:
             np.save(f, img)
     return img
+
+
+def labeled_paths() -> List[Path]:
+    # https://www.kaggle.com/c/noaa-fisheries-steller-sea-lion-population-count/discussion/30895
+    mismatched = pd.read_csv(str(DATA_ROOT / 'MismatchedTrainImages.txt'))
+    bad_ids = set(mismatched.train_id)
+    # https://www.kaggle.com/c/noaa-fisheries-steller-sea-lion-population-count/discussion/31424
+    bad_ids.update([912,  200])
+    # FIXME - these are valid but have no coords, get them (esp. 912)!
+    # https://www.kaggle.com/c/noaa-fisheries-steller-sea-lion-population-count/discussion/31472#175541
+    bad_ids.update([491, 912])
+    return [p for p in DATA_ROOT.joinpath('Train').glob('*.jpg')
+            if int(p.stem) not in bad_ids]
 
 
 def make_loader(dataset_cls: type,
@@ -89,7 +102,7 @@ DATA_ROOT = Path(__file__).absolute().parent / 'data'
 
 
 def train_valid_split(args) -> Tuple[List[Path], List[Path]]:
-    img_paths = list(DATA_ROOT.joinpath('Train').glob('*.jpg'))
+    img_paths = labeled_paths()
     if args.limit and len(img_paths) > args.limit:
         random.seed(42)
         img_paths = random.sample(img_paths, args.limit)
