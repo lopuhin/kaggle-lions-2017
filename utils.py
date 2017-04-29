@@ -54,6 +54,11 @@ def load_image(path: Path, *, cache: bool) -> np.ndarray:
         return np.load(str(cached_path))
     img = cv2.imread(str(path))
     img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    if path.parent.name == 'Train':
+        # mask with TrainDotted
+        img_dotted = cv2.imread(str(path.parent.parent / 'TrainDotted' / path.name))
+        img_dotted = cv2.cvtColor(img_dotted, cv2.COLOR_BGR2RGB)
+        img[img_dotted.sum(axis=2) == 0, :] = 0
     if cache:
         with cached_path.open('wb') as f:
             np.save(f, img)
@@ -70,7 +75,7 @@ def labeled_paths() -> List[Path]:
     mismatched = pd.read_csv(str(DATA_ROOT / 'MismatchedTrainImages.txt'))
     bad_ids = set(mismatched.train_id)
     # https://www.kaggle.com/c/noaa-fisheries-steller-sea-lion-population-count/discussion/31424
-    bad_ids.update([912,  200])
+    bad_ids.update([941,  200])
     # FIXME - these are valid but have no coords, get them (esp. 912)!
     # https://www.kaggle.com/c/noaa-fisheries-steller-sea-lion-population-count/discussion/31472#175541
     bad_ids.update([491, 912])

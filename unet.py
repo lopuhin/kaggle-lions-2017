@@ -40,7 +40,13 @@ class SegmentationDataset(utils.BaseDataset):
 
     def __getitem__(self, idx):
         random.seed(idx if self.deterministic else None)
-        img_id = self.img_ids[idx % len(self.img_ids)]
+        while True:
+            x = self.new_x_y()
+            if x is not None:
+                return x
+
+    def new_x_y(self):
+        img_id = random.choice(self.img_ids)
         img = self.imgs[img_id]
         max_y, max_x = img.shape[:2]
         s = self.patch_size
@@ -72,6 +78,8 @@ class SegmentationDataset(utils.BaseDataset):
                 any_lions = True
         patch = patch[b:, b:][:s, :s]
         mask = mask[b:, b:][:s, :s]
+        if (patch.sum(axis=2) == 0).sum() / s**2 > 0.02:
+            return None  # masked too much
         if random.random() < 0.5:
             patch = np.flip(patch, axis=1).copy()
             mask = np.flip(mask, axis=1).copy()
