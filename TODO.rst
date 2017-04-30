@@ -8,11 +8,9 @@ UNet training:
 - determine image scale, rescale!
 
 performance:
+- downscale 4x or 2x in UNet
 - generate features in parallel with test predictions
-- prediction speed - make more shallow? maybe make FCN UNet?
-- fit predictions into uint8, downscale 4x in UNet
-- multi-threaded data loader to train at full speed on full dataset
-  (maybe training on 800 would be good enough?)
+- try more shallow UNet? maybe make an FCN UNet?
 
 other ideas:
 - check SOTA detection models - SSD, any other?

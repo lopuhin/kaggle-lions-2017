@@ -83,6 +83,13 @@ def labeled_paths() -> List[Path]:
             if int(p.stem) not in bad_ids]
 
 
+def downsample(img: np.ndarray, ratio: int=4) -> np.ndarray:
+    h, w = img.shape[:2]
+    h = int(h / ratio)
+    w = int(w / ratio)
+    return cv2.resize(img, (h, w))
+
+
 def make_loader(dataset_cls: type,
                 args, paths: List[Path], coords: pd.DataFrame,
                 deterministic: bool=False) -> DataLoader:

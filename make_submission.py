@@ -6,7 +6,6 @@ from pathlib import Path
 from typing import Tuple, List
 import warnings
 
-import cv2
 import numpy as np
 import pandas as pd
 from skimage.feature import blob_log
@@ -34,7 +33,7 @@ def load_xs_ys(pred_path: Path, coords: pd.DataFrame, thresholds=(0.02, 0.25),
             ys.append((coords.loc[img_id].cls == cls).sum())
         except KeyError:
             ys.append(0)
-        cls_pred = downsample(pred[cls])
+        cls_pred = pred[cls]
         x = [cls_pred.sum()]
         for i, threshold in enumerate(thresholds):
             bin_mask = cls_pred > threshold
@@ -47,13 +46,6 @@ def load_xs_ys(pred_path: Path, coords: pd.DataFrame, thresholds=(0.02, 0.25),
             x.append(len(blobs))
         xs.append(x)
     return np.array(xs), np.array(ys)
-
-
-def downsample(img: np.ndarray, ratio: int=4) -> np.ndarray:
-    h, w = img.shape[:2]
-    h = int(h / ratio)
-    w = int(w / ratio)
-    return cv2.resize(img, (h, w))
 
 
 def load_all_features(root: Path, only_vald: bool, args,

@@ -136,7 +136,8 @@ def predict(model, img_paths: List[Path], out_path: Path, patch_size: int):
 
     for img_path, pred_img in utils.imap_fixed_output_buffer(
             lambda _: next(predictions), img_paths, threads=1):
-        binarized = (pred_img * 1000).astype(np.uint16)
+        resized = np.stack([utils.downsample(p, 4) for p in pred_img])
+        binarized = (resized * 1000).astype(np.uint16)
         with gzip.open(str(out_path / '{}-pred.npy'.format(img_path.stem)), 'wb',
                            compresslevel=4) as f:
             np.save(f, binarized)
