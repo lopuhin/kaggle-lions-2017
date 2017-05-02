@@ -1,4 +1,7 @@
-- local validation vs. LB!
+Local validation vs. LB:
+- check how using only blob features performs
+- check count distibutions
+- think
 
 Training data:
 - still some missing labels during training - more mislabeled images?
