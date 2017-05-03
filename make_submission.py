@@ -6,6 +6,8 @@ from pathlib import Path
 from typing import Tuple, List
 import warnings
 
+import eli5
+from eli5.formatters.text import format_as_text
 import numpy as np
 import pandas as pd
 from skimage.feature import blob_log
@@ -40,7 +42,7 @@ def load_xs_ys(pred_path: Path, coords: pd.DataFrame, thresholds=(0.02, 0.25),
             if i + 1 < len(thresholds):
                 bin_mask &= cls_pred < thresholds[i + 1]
             x.append(bin_mask.sum())
-        for blob_threshold in [0.02, 0.04]:
+        for blob_threshold in [0.02, 0.04]: #, 0.08, 0.16]:
             blobs = blob_log(cls_pred, threshold=blob_threshold,
                              min_sigma=1, max_sigma=4, num_sigma=4)
             x.append(len(blobs))
@@ -60,7 +62,7 @@ def load_all_features(root: Path, only_vald: bool, args,
     if args.limit:
         pred_paths = pred_paths[:args.limit]
     ids = [get_id(p) for p in pred_paths]
-    if not args.new_features and features_path.exists():
+    if not args.refresh_features and features_path.exists():
         data = np.load(str(features_path))
         assert len(data['ys'][0]) == len(ids), (len(data['ys'][0]), len(ids))
         return ids, data['xs'], data['ys']
@@ -88,11 +90,11 @@ def train(all_xs, all_ys, *regs, save_to=None, concat_features=False):
     fitted_regs = []
     for cls in range(utils.N_CLASSES):
         ys = all_ys[cls]
-        xs = concated_xs if concat_features else all_xs[cls]
+        xs = input_features(concated_xs if concat_features else all_xs[cls])
         pred = average_predictions(
             [cross_val_predict(reg, xs, ys, cv=5) for reg in regs])
         rmse = np.sqrt(metrics.mean_squared_error(ys, pred))
-        print('cls {}, RMSE {:.2f}'.format(cls, rmse))
+        print('cls {}, mean {:.2f}, RMSE {:.2f}'.format(cls, np.mean(ys), rmse))
         all_rmse.append(np.mean(rmse))
         if save_to:
             fitted = []
@@ -100,6 +102,9 @@ def train(all_xs, all_ys, *regs, save_to=None, concat_features=False):
                 reg = clone(reg)
                 reg.fit(xs, ys)
                 fitted.append(reg)
+               #print(format_as_text(
+               #    eli5.explain_weights(reg),
+               #    show=('method', 'targets', 'feature_importances')))
             fitted_regs.append(fitted)
     print('Average RMSE for {}: {:.2f}'.format(regs_name, np.mean(all_rmse)))
     if save_to:
@@ -112,6 +117,11 @@ def average_predictions(preds: List[np.ndarray]) -> np.ndarray:
     return np.clip(pred, 0, None).round().astype(np.int32)
 
 
+def input_features(xs):
+    #return xs[:, :-2]
+    return xs[:, -1:]  # only blob features
+
+
 def main():
     parser = argparse.ArgumentParser()
     arg = parser.add_argument
@@ -120,16 +130,18 @@ def main():
     arg('--concat-features', action='store_true')
     arg('--predict-train', action='store_true')
     arg('--limit', type=int)
-    arg('--new-features', action='store_true')
+    arg('--refresh-features', action='store_true')
     args = parser.parse_args()
-
+    from sklearn.dummy import DummyRegressor
     model_path = args.root.joinpath('regressor.joblib')  # type: Path
     if args.mode == 'train':
         _, xs, ys = load_all_features(args.root, only_vald=True, args=args)
         train(xs, ys,
-              ExtraTreesRegressor(n_estimators=50),
-              XGBRegressor(n_estimators=50, max_depth=2),
-              Lasso(alpha=1.0, normalize=False, max_iter=100000),
+              # ExtraTreesRegressor(n_estimators=50),
+              # XGBRegressor(n_estimators=50, max_depth=2),
+              Lasso(alpha=1.0, normalize=False, max_iter=100000,
+                    fit_intercept=False),
+             #DummyRegressor(),
               save_to=model_path,
               concat_features=args.concat_features,
               )
@@ -145,7 +157,7 @@ def main():
             'adult_males', 'subadult_males', 'adult_females', 'juveniles', 'pups']
         all_preds = pd.DataFrame(index=ids, columns=classes)
         for cls, (cls_name, cls_regs) in enumerate(zip(classes, all_regs)):
-            xs = concated_xs if args.concat_features else all_xs[cls]
+            xs = input_features(concated_xs if args.concat_features else all_xs[cls])
             preds = [reg.predict(xs) for reg in cls_regs]
             all_preds[cls_name] = average_predictions(preds)
         out_path = args.root.joinpath(args.root.name + '.csv')

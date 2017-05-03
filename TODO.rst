@@ -1,7 +1,6 @@
 Local validation vs. LB:
-- check how using only blob features performs
-- check count distibutions
-- think
+- need better features (lasso weights show that)
+  and a "local" final classifier (per-blob or per-patch)
 
 Training data:
 - still some missing labels during training - more mislabeled images?
@@ -29,6 +28,7 @@ Other ideas:
 
 Later:
 - smart rounding
+- check reports here: https://www.afsc.noaa.gov/nmml/alaska/
 - more features for count prediction:
   https://www.kaggle.com/andraszsom/noaa-fisheries-steller-sea-lion-population-count/predict-the-number-of-pups
 
