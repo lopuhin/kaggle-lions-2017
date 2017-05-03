@@ -18,7 +18,7 @@ from torch import nn
 import tqdm
 
 import utils
-from unet_models import UNet
+from unet_models import UNet, Loss
 
 
 class SegmentationDataset(utils.BaseDataset):
@@ -153,7 +153,7 @@ def main():
     arg('--lr', type=float, default=0.0001)
     arg('--workers', type=int, default=2)
     arg('--fold', type=int, default=1)
-    arg('--nol-weight', type=float, default=1.0)
+    arg('--dice-weight', type=float, default=0.0)
     arg('--n-folds', type=int, default=5)
     arg('--mode', choices=[
         'train', 'validation', 'predict_valid', 'predict_test', 'predict_all_valid'],
@@ -168,9 +168,7 @@ def main():
     root = Path(args.root)
     model = UNet()
     model = utils.cuda(model)
-    class_weights = torch.ones(utils.N_CLASSES + 1)
-    class_weights[utils.N_CLASSES] = args.nol_weight
-    criterion = nn.NLLLoss2d(weight=utils.cuda(class_weights))
+    criterion = Loss(dice_weight=args.dice_weight)
     if args.mode == 'train':
         train_loader, valid_loader = (
             utils.make_loader(SegmentationDataset, args, train_paths, coords),

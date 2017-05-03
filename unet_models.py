@@ -2,7 +2,7 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
-from utils import N_CLASSES
+import utils
 
 
 def conv3x3(in_, out):
@@ -57,7 +57,7 @@ class UNet(nn.Module):
             if i != 0:
                 self.up.append(self.module(low_nf + nf, low_nf))
                 setattr(self, 'conv_up_{}'.format(i), self.up[-1])
-        self.conv_final = nn.Conv2d(filter_sizes[0], N_CLASSES + 1, 1)
+        self.conv_final = nn.Conv2d(filter_sizes[0], utils.N_CLASSES + 1, 1)
 
     def forward(self, x):
         xs = []
@@ -72,3 +72,24 @@ class UNet(nn.Module):
 
         x_out = self.conv_final(x_out)
         return F.log_softmax(x_out)
+
+
+class Loss:
+    def __init__(self, dice_weight=1.0):
+        self.nll_loss = nn.NLLLoss2d()
+        self.dice_weight = dice_weight
+
+    def __call__(self, outputs, targets):
+        loss = self.nll_loss(outputs, targets)
+        if self.dice_weight:
+            cls_weight = self.dice_weight / utils.N_CLASSES
+            for cls in range(utils.N_CLASSES):
+                dice_target = (targets == cls).float()
+                dice_output = outputs[:, cls]
+                intersection = (dice_output * dice_target).sum()
+                # union without intersection
+                uwi = dice_output.sum() + dice_target.sum()
+                if uwi[0] != 0:
+                    loss += (1 - intersection / uwi) * cls_weight
+            loss /= (1 + self.dice_weight)
+        return loss
