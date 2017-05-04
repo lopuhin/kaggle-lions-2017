@@ -87,10 +87,9 @@ class Loss:
             for cls in range(utils.N_CLASSES):
                 dice_target = (targets == cls).float()
                 dice_output = outputs[:, cls].exp()
-                if dice_target.max().data[0] != 0:  # FIXME - not sure about it
-                    intersection = (dice_output * dice_target).sum()
-                    # union without intersection
-                    uwi = dice_output.sum() + dice_target.sum() + eps
-                    loss += (1 - intersection / uwi) * cls_weight
+                intersection = (dice_output * dice_target).sum()
+                # union without intersection
+                uwi = dice_output.sum() + dice_target.sum() + eps
+                loss += (1 - intersection / uwi) * cls_weight
             loss /= (1 + self.dice_weight)
         return loss
