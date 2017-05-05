@@ -8,8 +8,8 @@ Training data:
 - determine image scale, rescale!
 
 UNet training:
+- why doesn't dice work? Try dice + sigmoid
 - better way to monitor progress - loss only on other classes? monitor dice loss?
-- try dice loss (maybe modify it - pos/neg weights, square size)
 - try to separate close lions to count them (predict distance)
 
 Performance:
