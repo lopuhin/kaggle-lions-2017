@@ -84,10 +84,10 @@ def labeled_paths() -> List[Path]:
 
 
 def downsample(img: np.ndarray, ratio: int=4) -> np.ndarray:
-    h, w = img.shape[:2]
+    h, w = img.shape
     h = int(h / ratio)
     w = int(w / ratio)
-    return cv2.resize(img, (h, w))
+    return cv2.resize(img, (w, h))
 
 
 def make_loader(dataset_cls: type,
