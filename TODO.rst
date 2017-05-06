@@ -1,15 +1,18 @@
 Local validation vs. LB:
-- need better features (lasso weights show that)
-  and a "local" final classifier (per-blob or per-patch)
+- make submission
+
+Regression:
+- try more features
+- try smaller patch size
+- check confusion
 
 Training data:
 - still some missing labels during training - more mislabeled images?
-- stratified split by count - not sure?
 - determine image scale, rescale!
 
 UNet training:
-- why doesn't dice work? Try dice + sigmoid
-- better way to monitor progress - loss only on other classes? monitor dice loss?
+- why doesn't dice work? Try harder: oversampling, larger targets
+- monitor regression loss
 - try to separate close lions to count them (predict distance)
 
 Performance:
@@ -25,9 +28,11 @@ Test data:
 
 Other ideas:
 - check SOTA detection models - SSD, any other?
+- check window classification one again - see car counting paper
 
 Later:
 - smart rounding
+- final regression on sums
 - check reports here: https://www.afsc.noaa.gov/nmml/alaska/
 - more features for count prediction:
   https://www.kaggle.com/andraszsom/noaa-fisheries-steller-sea-lion-population-count/predict-the-number-of-pups

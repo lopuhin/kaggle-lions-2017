@@ -176,7 +176,9 @@ def round_prediction(pred: np.ndarray) -> np.ndarray:
 
 
 def input_features(xs):
-    return xs[:, 4:]  # strip coords
+    xs = xs[:, 4:]  # strip coords
+    assert xs.shape[1] == len(FEATURE_NAMES)
+    return xs
 
 
 def main():
