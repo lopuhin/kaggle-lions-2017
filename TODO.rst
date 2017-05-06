@@ -3,6 +3,7 @@ Local validation vs. LB:
 
 Regression:
 - try more features
+- try concated xs
 - try smaller patch size
 - check confusion
 

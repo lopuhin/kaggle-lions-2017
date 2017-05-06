@@ -181,6 +181,24 @@ def input_features(xs):
     return xs
 
 
+def predict(root: Path, model_path: Path, all_ids, all_xs, concat_features=False):
+    all_regs = joblib.load(model_path)
+    concated_xs = np.concatenate(all_xs, axis=1)
+    classes = [
+        'adult_males', 'subadult_males', 'adult_females', 'juveniles', 'pups']
+    unique_ids = sorted(set(all_ids[0]))
+    all_preds = pd.DataFrame(index=unique_ids, columns=classes)
+    for cls, (cls_name, cls_regs) in enumerate(zip(classes, all_regs)):
+        ids = all_ids[cls]
+        xs = input_features(concated_xs if concat_features else all_xs[cls])
+        pred = average_predictions([reg.predict(xs) for reg in cls_regs])
+        all_preds[cls_name] = round_prediction(np.array(
+            [pred[ids == img_id].sum() / STEP_RATIO**2 for img_id in unique_ids]))
+    out_path = root.joinpath(root.name + '.csv')
+    all_preds.to_csv(str(out_path), index_label='test_id')
+    print('Saved submission to {}'.format(out_path))
+
+
 def main():
     parser = argparse.ArgumentParser()
     arg = parser.add_argument
@@ -207,22 +225,12 @@ def main():
               )
     elif args.mode == 'predict':
         if args.predict_train:
-            ids, all_xs, _ = load_all_features(args.root, only_valid=True, args=args)
+            ids, xs, _ = load_all_features(args.root, only_valid=True, args=args)
         else:
-            ids, all_xs, _ = load_all_features(
+            ids, xs, _ = load_all_features(
                 args.root.joinpath('test'), only_valid=False, args=args)
-        all_regs = joblib.load(model_path)
-        concated_xs = np.concatenate(all_xs, axis=1)
-        classes = [
-            'adult_males', 'subadult_males', 'adult_females', 'juveniles', 'pups']
-        all_preds = pd.DataFrame(index=ids, columns=classes)
-        for cls, (cls_name, cls_regs) in enumerate(zip(classes, all_regs)):
-            xs = input_features(concated_xs if args.concat_features else all_xs[cls])
-            preds = [reg.predict(xs) for reg in cls_regs]
-            all_preds[cls_name] = average_predictions(preds)
-        out_path = args.root.joinpath(args.root.name + '.csv')
-        all_preds.to_csv(str(out_path), index_label='test_id')
-        print('Saved submission to {}'.format(out_path))
+        predict(args.root, model_path, all_ids=ids, all_xs=xs,
+                concat_features=args.concat_features)
 
 
 if __name__ == '__main__':
