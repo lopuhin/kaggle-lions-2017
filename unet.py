@@ -7,6 +7,8 @@ import random
 import shutil
 from typing import List
 
+from make_submission import PRED_SCALE
+
 import pandas as pd
 import numpy as np
 from shapely.geometry import Point
@@ -14,7 +16,6 @@ from shapely.affinity import rotate
 import skimage.transform
 import skimage.io
 import torch
-from torch import nn
 import tqdm
 
 import utils
@@ -136,7 +137,7 @@ def predict(model, img_paths: List[Path], out_path: Path, patch_size: int):
 
     for img_path, pred_img in utils.imap_fixed_output_buffer(
             lambda _: next(predictions), img_paths, threads=1):
-        resized = np.stack([utils.downsample(p, 4) for p in pred_img])
+        resized = np.stack([utils.downsample(p, PRED_SCALE) for p in pred_img])
         binarized = (resized * 1000).astype(np.uint16)
         with gzip.open(str(out_path / '{}-pred.npy'.format(img_path.stem)), 'wb',
                            compresslevel=4) as f:
@@ -177,7 +178,8 @@ def main():
         if root.exists() and args.clean:
             shutil.rmtree(str(root))
         root.mkdir(exist_ok=True)
-        root.joinpath('params.json').write_text(json.dumps(vars(args)))
+        root.joinpath('params.json').write_text(
+            json.dumps(vars(args), indent=True, sort_keys=True))
         utils.train(args, model, criterion,
               train_loader=train_loader, valid_loader=valid_loader)
     else:

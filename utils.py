@@ -4,6 +4,7 @@ from datetime import datetime
 import glob
 import gzip
 from itertools import islice
+import functools
 from pathlib import Path
 from pprint import pprint
 import random
@@ -19,6 +20,7 @@ import numpy as np
 import skimage.io
 import skimage.exposure
 from sklearn.model_selection import KFold
+import statprof
 import torch
 from torch import nn
 from torch.autograd import Variable
@@ -359,3 +361,15 @@ def plot(*args, ymin=None, ymax=None, xmin=None, xmax=None, params=False,
                           for i, idx in enumerate(indices[:-1])]
                 plt.plot(xs, ys, label='{}: {}'.format(path, key))
     plt.legend()
+
+
+def profile(fn):
+    @functools.wraps(fn)
+    def wrapped(*args, **kwargs):
+        statprof.start()
+        try:
+            return fn(*args, **kwargs)
+        finally:
+            statprof.stop()
+            statprof.display()
+    return wrapped

@@ -31,4 +31,3 @@ Later:
 - check reports here: https://www.afsc.noaa.gov/nmml/alaska/
 - more features for count prediction:
   https://www.kaggle.com/andraszsom/noaa-fisheries-steller-sea-lion-population-count/predict-the-number-of-pups
-

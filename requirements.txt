@@ -1,3 +1,4 @@
+eli5==0.6.0
 matplotlib==2.0.0
 opencv-python==3.2.0.7
 pandas==0.19.2
@@ -6,6 +7,7 @@ scikit-image==0.13.0
 scikit-learn==0.18.1
 scipy==0.19.0
 Shapely==1.5.17.post1
+statprof-smarkets==1.0.0
 torch==0.1.12.post2
 torchvision==0.1.8
 tqdm==4.11.2
