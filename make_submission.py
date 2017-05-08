@@ -134,7 +134,7 @@ def train(all_ids, all_xs, all_ys, *regs,
                 ys_by_id.append(0)
             pred_by_id.append(pred[idx].sum() / STEP_RATIO**2)
         pred_by_id = round_prediction(np.array(pred_by_id))
-        patch_rmse = np.sqrt(metrics.mean_squared_error(ys, round_prediction(pred)))
+        patch_rmse = np.sqrt(metrics.mean_squared_error(ys, pred))
         rmse = np.sqrt(metrics.mean_squared_error(ys_by_id, pred_by_id))
         baseline_rmse = np.sqrt(metrics.mean_squared_error(
             cross_val_predict(DummyRegressor(), [[0]] * len(ys_by_id), ys_by_id, cv=5),
