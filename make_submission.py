@@ -26,6 +26,7 @@ import utils
 STEP_RATIO = 2
 PRED_SCALE = 4
 FEATURE_NAMES = ['sum', 'sum-0.02', 'sum-0.25', 'blob-0.02', 'blob-0.04']
+FEATURE_NAMES = ['blob-0.02', 'blob-0.04']
 
 
 def load_xs_ys(pred_path: Path, coords: pd.DataFrame,
@@ -90,10 +91,14 @@ def load_all_features(root: Path, only_valid: bool, args,
     if args.limit:
         pred_paths = pred_paths[:args.limit]
     if not args.new_features and features_path.exists():
-        data = np.load(str(features_path))
-        ids = [get_id(p) for p in pred_paths]
-        assert set(ids) == set(data['ids'][0])
-        return data['ids'], data['xs'], data['ys']
+        print('Loading features...')
+        try:
+            data = np.load(str(features_path))
+            ids = [get_id(p) for p in pred_paths]
+            assert set(ids) == set(data['ids'][0])
+            return data['ids'], data['xs'], data['ys']
+        finally:
+            print('done loading features')
     print('{} total'.format(len(pred_paths)))
     all_xs, all_ys, all_ids = [[[] for _ in range(utils.N_CLASSES)] for _ in range(3)]
     with multiprocessing.pool.Pool(processes=16) as pool:
@@ -176,7 +181,7 @@ def round_prediction(pred: np.ndarray) -> np.ndarray:
 
 
 def input_features(xs):
-    xs = xs[:, 4:]  # strip coords
+    xs = xs[:, -2:]  # leave only blobs
     assert xs.shape[1] == len(FEATURE_NAMES)
     return xs
 
@@ -192,6 +197,7 @@ def predict(root: Path, model_path: Path, all_ids, all_xs, concat_features=False
         ids = all_ids[cls]
         xs = input_features(concated_xs if concat_features else all_xs[cls])
         pred = average_predictions([reg.predict(xs) for reg in cls_regs])
+        # TODO - faster
         all_preds[cls_name] = round_prediction(np.array(
             [pred[ids == img_id].sum() / STEP_RATIO**2 for img_id in unique_ids]))
     out_path = root.joinpath(root.name + '.csv')

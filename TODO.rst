@@ -10,6 +10,7 @@ Local validation vs. LB:
   - leak?
   - bug in how predictions are generated?
   - something is different between train and test?
+  - scale seems to be very different!
 - check test predictions
 - why is mean for cls-2 (adult_females) much higher than what is used in baseline submissions?
 - try training on another fold
