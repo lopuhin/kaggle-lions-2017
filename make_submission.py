@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 import argparse
 from functools import partial
 import multiprocessing.pool
@@ -115,6 +115,14 @@ def load_all_features(root: Path, only_valid: bool, args,
     return ids, xs, ys
 
 
+def get_pred_by_id(ids, pred, unique_ids):
+    pred_by_id = np.zeros(len(unique_ids))
+    id_idx = {img_id: i for i, img_id in enumerate(unique_ids)}
+    for img_id, x in zip(ids, pred):
+        pred_by_id[id_idx[img_id]] += x
+    return pred_by_id / STEP_RATIO**2
+
+
 def train(all_ids, all_xs, all_ys, *regs,
           save_to=None, concat_features=False, explain=False):
     coords = utils.load_coords()
@@ -131,14 +139,13 @@ def train(all_ids, all_xs, all_ys, *regs,
             [cross_val_predict(reg, xs, ys, cv=cv, groups=ids) for reg in regs])
         ys_by_id, pred_by_id = [], []
         unique_ids = sorted(set(ids))
+        pred_by_id = get_pred_by_id(ids, pred, unique_ids)
         for img_id in unique_ids:
-            idx = ids == img_id
             try:
                 ys_by_id.append((coords.loc[[img_id]].cls == cls).sum())
             except KeyError:
                 ys_by_id.append(0)
-            pred_by_id.append(pred[idx].sum() / STEP_RATIO**2)
-        pred_by_id = round_prediction(np.array(pred_by_id))
+        pred_by_id = round_prediction(pred_by_id)
         patch_rmse = np.sqrt(metrics.mean_squared_error(ys, pred))
         rmse = np.sqrt(metrics.mean_squared_error(ys_by_id, pred_by_id))
         baseline_rmse = np.sqrt(metrics.mean_squared_error(
@@ -197,9 +204,7 @@ def predict(root: Path, model_path: Path, all_ids, all_xs, concat_features=False
         ids = all_ids[cls]
         xs = input_features(concated_xs if concat_features else all_xs[cls])
         pred = average_predictions([reg.predict(xs) for reg in cls_regs])
-        # TODO - faster
-        all_preds[cls_name] = round_prediction(np.array(
-            [pred[ids == img_id].sum() / STEP_RATIO**2 for img_id in unique_ids]))
+        all_preds[cls_name] = round_prediction(get_pred_by_id(ids, pred, unique_ids))
     out_path = root.joinpath(root.name + '.csv')
     all_preds.to_csv(str(out_path), index_label='test_id')
     print('Saved submission to {}'.format(out_path))
