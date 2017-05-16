@@ -106,7 +106,7 @@ def predict(model, img_paths: List[Path], out_path: Path, patch_size: int):
         img_path, img = arg
         h, w = img.shape[:2]
         s = patch_size
-        step = s + 32  # // 2
+        step = s - 32  # // 2
         xs = list(range(0, w - s, step)) + [w - s]
         ys = list(range(0, h - s, step)) + [h - s]
         all_xy = [(x, y) for x in xs for y in ys]
