@@ -9,6 +9,7 @@ from typing import List
 
 from make_submission import PRED_SCALE
 
+import cv2
 import pandas as pd
 import numpy as np
 from shapely.geometry import Point
@@ -99,12 +100,17 @@ class SegmentationDataset(utils.BaseDataset):
                        for img in self.imgs.values()))
 
 
-def predict(model, img_paths: List[Path], out_path: Path, patch_size: int):
+def predict(model, img_paths: List[Path], out_path: Path, patch_size: int,
+            is_test=False):
     model.eval()
 
     def predict(arg):
         img_path, img = arg
         h, w = img.shape[:2]
+        if is_test:
+            h = int(h / 2)
+            w = int(w / 2)
+            img = cv2.resize(img, (w, h))
         s = patch_size
         step = s - 32  # // 2
         xs = list(range(0, w - s, step)) + [w - s]
@@ -199,7 +205,8 @@ def main():
             test_paths = list(utils.DATA_ROOT.joinpath('Test').glob('*.jpg'))
             out_path = root.joinpath('test')
             out_path.mkdir(exist_ok=True)
-            predict(model, test_paths, out_path, patch_size=args.patch_size)
+            predict(model, test_paths, out_path, patch_size=args.patch_size,
+                    is_test=True)
         else:
             parser.error('Unexpected mode {}'.format(args.mode))
 
