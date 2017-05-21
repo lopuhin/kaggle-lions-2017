@@ -8,8 +8,6 @@ Local validation vs. LB:
 - try training on another fold - check why is validation so much worse?
 
 Regression:
-- try more features
-- try concated xs
 - try smaller patch size
 
 Training data:

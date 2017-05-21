@@ -30,12 +30,16 @@ class SegmentationDataset(utils.BaseDataset):
                  transform,
                  size: int,
                  mark_r: int=8,
+                 min_scale: float=1.,
+                 max_scale: float=1.,
                  debug: bool=False,
                  deterministic: bool=False,
                  ):
         super().__init__(img_paths, coords)
         self.patch_size = size
         self.mark_r = mark_r
+        self.min_scale = min_scale
+        self.max_scale = max_scale
         self.transform = transform
         self.debug = debug
         self.deterministic = deterministic
@@ -48,10 +52,16 @@ class SegmentationDataset(utils.BaseDataset):
                 return x
 
     def new_x_y(self):
+        """ Sample (x, y) pair.
+        """
         img_id = random.choice(self.img_ids)
         img = self.imgs[img_id]
         max_y, max_x = img.shape[:2]
         s = self.patch_size
+        scale_aug = not (self.min_scale == self.max_scale == 1)
+        if scale_aug:
+            scale = random.uniform(self.min_scale, self.max_scale)
+            s *= scale
         b = int(np.ceil(np.sqrt(2) * s / 2))
         x, y = (random.randint(b, max_x - (b + s)),
                 random.randint(b, max_y - (b + s)))
@@ -69,19 +79,27 @@ class SegmentationDataset(utils.BaseDataset):
         mask[:] = utils.N_CLASSES
         nneg = lambda x: max(0, x)
         c = b + s // 2
+        mark_r = self.mark_r
+        if scale_aug:
+            # TODO - not sure if this is right, needs tweaks
+            mark_r = int(np.round(mark_r * scale))
         for i in range(len(coords)):
             item = coords.iloc[i]
             ix, iy = item.col - x, item.row - y
             if (0 <= ix <= 2 * b + s) and (0 <= iy <= 2 * b + s):
                 p = rotate(Point(ix, iy), -angle, origin=(c, c))
                 ix, iy = int(p.x), int(p.y)
-                mask[nneg(iy - self.mark_r): nneg(iy + self.mark_r),
-                     nneg(ix - self.mark_r): nneg(ix + self.mark_r)] = item.cls
+                mask[nneg(iy - mark_r): nneg(iy + mark_r),
+                     nneg(ix - mark_r): nneg(ix + mark_r)] = item.cls
                 any_lions = True
         patch = patch[b:, b:][:s, :s]
         mask = mask[b:, b:][:s, :s]
         if (patch.sum(axis=2) == 0).sum() / s**2 > 0.02:
             return None  # masked too much
+        if scale_aug:
+            size = (self.patch_size, self.patch_size)
+            patch = cv2.resize(patch, size)
+            mask = cv2.resize(mask, size)
         if random.random() < 0.5:
             patch = np.flip(patch, axis=1).copy()
             mask = np.flip(mask, axis=1).copy()
@@ -168,6 +186,8 @@ def main():
     arg('--clean', action='store_true')
     arg('--epoch-size', type=int)
     arg('--limit', type=int, help='Use only N images for train/valid')
+    arg('--min-scale', type=float, default=1)
+    arg('--max-scale', type=float, default=1)
     args = parser.parse_args()
 
     coords = utils.load_coords()
@@ -177,10 +197,13 @@ def main():
     model = utils.cuda(model)
     criterion = Loss(dice_weight=args.dice_weight)
     if args.mode == 'train':
+        kwargs = dict(min_scale=args.min_scale, max_scale=args.max_scale)
         train_loader, valid_loader = (
-            utils.make_loader(SegmentationDataset, args, train_paths, coords),
-            utils.make_loader(SegmentationDataset, args, valid_paths, coords,
-                              deterministic=True))
+            utils.make_loader(
+                SegmentationDataset, args, train_paths, coords, **kwargs),
+            utils.make_loader(
+                SegmentationDataset, args, valid_paths, coords,
+                deterministic=True, **kwargs))
         if root.exists() and args.clean:
             shutil.rmtree(str(root))
         root.mkdir(exist_ok=True)

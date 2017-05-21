@@ -94,13 +94,14 @@ def downsample(img: np.ndarray, ratio: int=4) -> np.ndarray:
 
 def make_loader(dataset_cls: type,
                 args, paths: List[Path], coords: pd.DataFrame,
-                deterministic: bool=False) -> DataLoader:
+                deterministic: bool=False, **kwargs) -> DataLoader:
     dataset = dataset_cls(
         img_paths=paths,
         coords=coords,
         size=args.patch_size,
         transform=img_transform,
         deterministic=deterministic,
+        **kwargs,
     )
     return DataLoader(
         dataset=dataset,
