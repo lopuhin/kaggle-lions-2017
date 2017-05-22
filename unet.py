@@ -61,11 +61,13 @@ class SegmentationDataset(utils.BaseDataset):
         scale_aug = not (self.min_scale == self.max_scale == 1)
         if scale_aug:
             scale = random.uniform(self.min_scale, self.max_scale)
-            s *= scale
+            s = int(np.round(s * scale))
+        else:
+            scale = 1
         b = int(np.ceil(np.sqrt(2) * s / 2))
         x, y = (random.randint(b, max_x - (b + s)),
                 random.randint(b, max_y - (b + s)))
-        patch = img[y: y + 2 * b + s, x: x + 2 * b + s]
+        patch = img[y - b: y + b + s, x - b: x + b + s]
         try:
             coords = self.coords.loc[[img_id]]
         except KeyError:
@@ -75,41 +77,32 @@ class SegmentationDataset(utils.BaseDataset):
         any_lions = False
         angle = random.random() * 360
         patch = skimage.transform.rotate(patch, angle, preserve_range=True)
-        mask = np.zeros(patch.shape[:2], dtype=np.int64)
-        mask[:] = utils.N_CLASSES
-        nneg = lambda x: max(0, x)
-        c = b + s // 2
-        mark_r = self.mark_r
-        if scale_aug:
-            # TODO - not sure if this is right, needs tweaks
-            mark_r = int(np.round(mark_r * scale))
-        for i in range(len(coords)):
-            item = coords.iloc[i]
-            ix, iy = item.col - x, item.row - y
-            if (0 <= ix <= 2 * b + s) and (0 <= iy <= 2 * b + s):
-                p = rotate(Point(ix, iy), -angle, origin=(c, c))
-                ix, iy = int(p.x), int(p.y)
-                mask[nneg(iy - mark_r): nneg(iy + mark_r),
-                     nneg(ix - mark_r): nneg(ix + mark_r)] = item.cls
-                any_lions = True
         patch = patch[b:, b:][:s, :s]
-        mask = mask[b:, b:][:s, :s]
         if (patch.sum(axis=2) == 0).sum() / s**2 > 0.02:
             return None  # masked too much
         if scale_aug:
-            size = (self.patch_size, self.patch_size)
-            patch = cv2.resize(patch, size)
-            mask = cv2.resize(mask, size)
+            patch = cv2.resize(patch, (self.patch_size, self.patch_size))
+        assert patch.shape == (self.patch_size, self.patch_size, 3), patch.shape
+        mask = np.zeros((self.patch_size, self.patch_size), dtype=np.int64)
+        mask[:] = utils.N_CLASSES
+        nneg = lambda x: max(0, x)
+        for i in range(len(coords)):
+            item = coords.iloc[i]
+            ix, iy = item.col - x, item.row - y
+            if (-b <= ix <= b + s) and (-b <= iy <= b + s):
+                p = rotate(Point(ix, iy), -angle, origin=(s // 2, s // 2))
+                ix, iy = int(p.x / scale), int(p.y / scale)
+                mask[nneg(iy - self.mark_r): nneg(iy + self.mark_r),
+                     nneg(ix - self.mark_r): nneg(ix + self.mark_r)] = item.cls
+                any_lions = True
         if random.random() < 0.5:
             patch = np.flip(patch, axis=1).copy()
             mask = np.flip(mask, axis=1).copy()
-        assert patch.shape == (s, s, 3), patch.shape
-        assert mask.shape == (s, s), mask.shape
         if self.debug and any_lions:
             for cls in range(utils.N_CLASSES):
-                skimage.io.imsave('mask-{}.jpg'.format(cls),
-                                  (mask == cls).astype(np.float32))
-            skimage.io.imsave('patch.jpg', patch / 255)
+                utils.save_image('mask-{}.jpg'.format(cls),
+                                 (mask == cls).astype(np.float32))
+            utils.save_image('patch.jpg', patch / 255)
         return self.transform(patch), torch.from_numpy(mask)
 
     def __len__(self):
