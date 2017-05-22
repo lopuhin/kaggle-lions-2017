@@ -26,7 +26,7 @@ import utils
 STEP_RATIO = 2
 PRED_SCALE = 4
 FEATURE_NAMES = ['sum', 'sum-0.02', 'sum-0.25', 'blob-0.02', 'blob-0.04']
-FEATURE_NAMES = ['blob-0.02', 'blob-0.04']
+# FEATURE_NAMES = ['blob-0.02', 'blob-0.04']
 
 
 def load_xs_ys(pred_path: Path, coords: pd.DataFrame,
@@ -188,7 +188,7 @@ def round_prediction(pred: np.ndarray) -> np.ndarray:
 
 
 def input_features(xs):
-    xs = xs[:, -2:]  # leave only blobs
+    xs = xs[:, -5:]  # all features
     assert xs.shape[1] == len(FEATURE_NAMES)
     return xs
 
