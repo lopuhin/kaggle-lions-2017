@@ -25,12 +25,14 @@ import utils
 
 STEP_RATIO = 2
 PRED_SCALE = 4
-FEATURE_NAMES = ['sum', 'sum-0.02', 'sum-0.25', 'blob-0.02', 'blob-0.04']
-# FEATURE_NAMES = ['blob-0.02', 'blob-0.04']
+ALL_FEATURE_NAMES = ['x0', 'x1', 'y0', 'y1',
+                     'sum', 'sum-0.04', 'sum-0.08', 'sum-0.25',
+                     'blob-0.04', 'blob-0.04-sum', 'blob-0.08', 'blob-0.08-sum']
+FEATURE_NAMES = ['sum-0.08', 'sum-0.25', 'blob-0.04-sum', 'blob-0.08-sum']
 
 
 def load_xs_ys(pred_path: Path, coords: pd.DataFrame,
-               thresholds=(0.02, 0.25), patch_size=80,
+               thresholds=(0.04, 0.08, 0.25), patch_size=80,
                ) -> Tuple[int, np.ndarray, np.ndarray]:
     pred = utils.load_pred(pred_path)
     img_id = int(pred_path.name.split('-')[0])
@@ -47,10 +49,10 @@ def load_xs_ys(pred_path: Path, coords: pd.DataFrame,
                                   cls_coords.row / PRED_SCALE))
         except KeyError:
             cls_coords = []
-        cls_blobs = [[(x, y)
+        cls_blobs = [[(x, y, cls_pred[int(np.round(y)), int(np.round(x))])
                       for y, x, _ in blob_log(cls_pred, threshold=blob_threshold,
                                               min_sigma=1, max_sigma=4, num_sigma=4)]
-                     for blob_threshold in [0.02, 0.04]]
+                     for blob_threshold in [0.04, 0.08]]
         max_y, max_x = cls_pred.shape
         step = patch_size // STEP_RATIO
         steps = lambda m: range(-patch_size + step, m + patch_size - step, step)
@@ -74,8 +76,12 @@ def load_xs_ys(pred_path: Path, coords: pd.DataFrame,
                 cls_targets.append(target)
                 for th_blobs in cls_blobs:
                     # TODO - lookup
-                    features.append(
-                        sum(x0 <= x < x1 and y0 <= y < y1 for x, y in th_blobs))
+                    blob_count = blob_sum = 0
+                    for x, y, value in th_blobs:
+                        if x0 <= x < x1 and y0 <= y < y1:
+                            blob_count += 1
+                            blob_sum += value
+                    features.extend([blob_count, blob_sum])
     return img_id, np.array(all_features), np.array(all_targets)
 
 
@@ -188,7 +194,7 @@ def round_prediction(pred: np.ndarray) -> np.ndarray:
 
 
 def input_features(xs):
-    xs = xs[:, -5:]  # all features
+    xs = xs[:, tuple(ALL_FEATURE_NAMES.index(f) for f in FEATURE_NAMES)]
     assert xs.shape[1] == len(FEATURE_NAMES)
     return xs
 
