@@ -14,8 +14,6 @@ import pandas as pd
 import numpy as np
 from shapely.geometry import Point
 from shapely.affinity import rotate
-import skimage.transform
-import skimage.io
 import torch
 import tqdm
 
@@ -43,9 +41,17 @@ class SegmentationDataset(utils.BaseDataset):
         self.transform = transform
         self.debug = debug
         self.deterministic = deterministic
+        self.coords_by_img_id = {}
+        for img_id in self.img_ids:
+            try:
+                coords = self.coords.loc[[img_id]]
+            except KeyError:
+                coords = []
+            self.coords_by_img_id[img_id] = coords
 
     def __getitem__(self, idx):
-        random.seed(idx if self.deterministic else None)
+        if self.deterministic:
+            random.seed(idx)
         while True:
             x = self.new_x_y()
             if x is not None:
@@ -68,17 +74,12 @@ class SegmentationDataset(utils.BaseDataset):
         x, y = (random.randint(b, max_x - (b + s)),
                 random.randint(b, max_y - (b + s)))
         patch = img[y - b: y + b + s, x - b: x + b + s]
-        try:
-            coords = self.coords.loc[[img_id]]
-        except KeyError:
-            coords = []
-        # TODO - sample a point close to some lion with non-zero prob
-        # TODO - check that this loop is not too slow, can be vectorized
+        coords = self.coords_by_img_id[img_id]
         any_lions = False
         angle = random.random() * 360
-        patch = skimage.transform.rotate(patch, angle, preserve_range=True)
+        patch = utils.rotated(patch, angle)
         patch = patch[b:, b:][:s, :s]
-        if (patch.sum(axis=2) == 0).sum() / s**2 > 0.02:
+        if (patch == 0).sum() / s**2 > 0.02:
             return None  # masked too much
         if scale_aug:
             patch = cv2.resize(patch, (self.patch_size, self.patch_size))
@@ -86,14 +87,13 @@ class SegmentationDataset(utils.BaseDataset):
         mask = np.zeros((self.patch_size, self.patch_size), dtype=np.int64)
         mask[:] = utils.N_CLASSES
         nneg = lambda x: max(0, x)
-        for i in range(len(coords)):
-            item = coords.iloc[i]
-            ix, iy = item.col - x, item.row - y
+        for cls, col, row in zip(coords.cls, coords.col, coords.row):
+            ix, iy = col - x, row - y
             if (-b <= ix <= b + s) and (-b <= iy <= b + s):
                 p = rotate(Point(ix, iy), -angle, origin=(s // 2, s // 2))
                 ix, iy = int(p.x / scale), int(p.y / scale)
                 mask[nneg(iy - self.mark_r): nneg(iy + self.mark_r),
-                     nneg(ix - self.mark_r): nneg(ix + self.mark_r)] = item.cls
+                     nneg(ix - self.mark_r): nneg(ix + self.mark_r)] = cls
                 any_lions = True
         if random.random() < 0.5:
             patch = np.flip(patch, axis=1).copy()
@@ -102,7 +102,7 @@ class SegmentationDataset(utils.BaseDataset):
             for cls in range(utils.N_CLASSES):
                 utils.save_image('mask-{}.jpg'.format(cls),
                                  (mask == cls).astype(np.float32))
-            utils.save_image('patch.jpg', patch / 255)
+            utils.save_image('patch.jpg', patch)
         return self.transform(patch), torch.from_numpy(mask)
 
     def __len__(self):
@@ -205,7 +205,7 @@ def main():
         root.joinpath('params.json').write_text(
             json.dumps(vars(args), indent=True, sort_keys=True))
         utils.train(args, model, criterion,
-              train_loader=train_loader, valid_loader=valid_loader)
+                    train_loader=train_loader, valid_loader=valid_loader)
     else:
         utils.load_best_model(model, root)
         if args.mode == 'validation':

@@ -50,6 +50,18 @@ img_transform = Compose([
 ])
 
 
+def profile(fn):
+    @functools.wraps(fn)
+    def wrapped(*args, **kwargs):
+        statprof.start()
+        try:
+            return fn(*args, **kwargs)
+        finally:
+            statprof.stop()
+            statprof.display()
+    return wrapped
+
+
 def load_image(path: Path, *, cache: bool) -> np.ndarray:
     cached_path = path.parent / 'cache' / (path.stem + '.npy')  # type: Path
     if cache and cached_path.exists():
@@ -189,10 +201,12 @@ def train(args, model: nn.Module, criterion, *, train_loader, valid_loader):
     }, str(model_path))
 
     report_each = 10
+    save_prediction_each = report_each * 10
     root = Path(args.root)
     log = root.joinpath('train.log').open('at', encoding='utf8')
     for epoch in range(epoch, args.n_epochs + 1):
         model.train()
+        random.seed()
         tq = tqdm.tqdm(total=(args.epoch_size or
                               len(train_loader) * args.batch_size))
         tq.set_description('Epoch {}'.format(epoch))
@@ -220,7 +234,7 @@ def train(args, model: nn.Module, criterion, *, train_loader, valid_loader):
                 tq.set_postfix(loss='{:.3f}'.format(mean_loss))
                 if i and i % report_each == 0:
                     write_event(log, step, loss=mean_loss)
-                    if not is_classifier:
+                    if i % save_prediction_each == 0 and not is_classifier:
                         save_predictions(root, inputs, targets, outputs)
             write_event(log, step, loss=mean_loss)
             tq.close()
@@ -237,6 +251,13 @@ def train(args, model: nn.Module, criterion, *, train_loader, valid_loader):
             save(epoch)
             print('done.')
             return
+
+
+def rotated(patch, angle):
+    size = patch.shape[:2]
+    center = tuple(np.array(size) / 2)
+    rot_mat = cv2.getRotationMatrix2D(center, angle, 1.0)
+    return cv2.warpAffine(patch, rot_mat, size, flags=cv2.INTER_LINEAR)
 
 
 def save_predictions(root: Path, inputs, targets, outputs):
@@ -374,15 +395,3 @@ def plot(*args, ymin=None, ymax=None, xmin=None, xmax=None, params=False,
                           for i, idx in enumerate(indices[:-1])]
                 plt.plot(xs, ys, label='{}: {}'.format(path, key))
     plt.legend()
-
-
-def profile(fn):
-    @functools.wraps(fn)
-    def wrapped(*args, **kwargs):
-        statprof.start()
-        try:
-            return fn(*args, **kwargs)
-        finally:
-            statprof.stop()
-            statprof.display()
-    return wrapped
