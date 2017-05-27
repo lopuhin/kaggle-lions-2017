@@ -147,7 +147,7 @@ def train_valid_split(args, coords) -> Tuple[List[Path], List[Path]]:
 
 
 def load_coords():
-    return pd.read_csv(str(DATA_ROOT / 'coords-threeplusone.csv'),
+    return pd.read_csv(str(DATA_ROOT / 'coords-threeplusone-v0.4.csv'),
                        index_col=0)
 
 

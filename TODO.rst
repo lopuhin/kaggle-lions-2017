@@ -7,7 +7,6 @@ Regression:
 - any other ideas about how to prediction sea lion count
 
 Training data:
-- switch to coords-threeplusone-v0.4.csv
 - try a stratified split
 - check labels on more training images (to catch bad orientation)
 
