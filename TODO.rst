@@ -1,35 +1,30 @@
-Local validation vs. LB:
-- reasons:
-  - bug in how predictions are generated? re-run with correct step
-  - something is different between train and test?
-  - scale seems to be very different! make predictions with half scale
-- check test predictions
-- why is mean for cls-2 (adult_females) much higher than what is used in baseline submissions?
-- try training on another fold - check why is validation so much worse?
+Local validation:
+- try to change scale randomly
 
 Regression:
-- try smaller patch size
+- try to vary patch size (40 used to perform worse)
+- make blobs great again? currently sum is the best feature
+- any other ideas about how to prediction sea lion count
 
 Training data:
-- https://www.kaggle.com/threeplusone/sea-lion-coordinates/comments/comments#182401
-- still some missing labels during training - more mislabeled images?
-- determine image scale, rescale!
+- switch to coords-threeplusone-v0.4.csv
+- check labels on more training images (to catch bad orientation)
 
 UNet training:
+- lr schedule
+- UNet hyperparameters
+- SGD
 - why doesn't dice work? Try harder: oversampling, larger targets
 - monitor regression loss
 - try to separate close lions to count them (predict distance)
-- scale augmentation
 - class weight
-- UNet hyperparameters
-
-./make_submission.py runs/unet-limit800-clean-lr0.0004/ predict --new-features
 
 Performance:
+- downscale 4x or 2x in UNet output
 - do not predict black areas on test
-- downscale 4x or 2x in UNet
 - generate features in parallel with test predictions
-- try more shallow UNet? maybe make an FCN UNet?
+- try more shallow UNet?
+- make an FCN UNet?
 
 Test data:
 - test predictions viewer
@@ -38,7 +33,7 @@ Test data:
 
 Other ideas:
 - check SOTA detection models - SSD, any other?
-- check window classification one again - see car counting paper
+- check window classification once again - see car counting paper
 
 Later:
 - smart rounding
