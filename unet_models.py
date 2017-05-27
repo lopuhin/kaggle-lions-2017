@@ -46,8 +46,6 @@ class UNet(nn.Module):
 
     def __init__(self, filters_base: int=32):
         super().__init__()
-        self.pool = nn.MaxPool2d(2, 2)
-        self.upsample = nn.UpsamplingNearest2d(scale_factor=2)
         filter_sizes = [filters_base * s for s in self.filter_factors]
         self.down, self.up = [], []
         for i, nf in enumerate(filter_sizes):
@@ -57,18 +55,29 @@ class UNet(nn.Module):
             if i != 0:
                 self.up.append(self.module(low_nf + nf, low_nf))
                 setattr(self, 'conv_up_{}'.format(i), self.up[-1])
+        bottom_s = 2
+        pool = nn.MaxPool2d(2, 2)
+        pool_bottom = nn.MaxPool2d(bottom_s, bottom_s)
+        upsample = nn.UpsamplingNearest2d(scale_factor=2)
+        upsample_bottom = nn.UpsamplingNearest2d(scale_factor=bottom_s)
+        self.downsamplers = [None] + [pool] * (len(self.down) - 1)
+        self.downsamplers[-1] = pool_bottom
+        self.upsamplers = [upsample] * len(self.up)
+        self.upsamplers[-1] = upsample_bottom
         self.conv_final = nn.Conv2d(filter_sizes[0], utils.N_CLASSES + 1, 1)
 
     def forward(self, x):
         xs = []
-        for i, down in enumerate(self.down):
-            x_in = x if i == 0 else self.pool(xs[-1])
+        for downsample, down in zip(self.downsamplers, self.down):
+            x_in = x if downsample is None else downsample(xs[-1])
             x_out = down(x_in)
             xs.append(x_out)
 
         x_out = xs[-1]
-        for i, (x_skip, up) in reversed(list(enumerate(zip(xs[:-1], self.up)))):
-            x_out = up(concat([self.upsample(x_out), x_skip]))
+        for x_skip, upsample, up in reversed(
+                list(zip(xs[:-1], self.upsamplers, self.up))):
+            x_out = upsample(x_out)
+            x_out = up(concat([x_out, x_skip]))
 
         x_out = self.conv_final(x_out)
         return F.log_softmax(x_out)
