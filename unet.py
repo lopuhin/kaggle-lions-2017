@@ -112,15 +112,15 @@ class SegmentationDataset(utils.BaseDataset):
 
 
 def predict(model, img_paths: List[Path], out_path: Path, patch_size: int,
-            is_test=False):
+            is_test=False, test_scale=1.0):
     model.eval()
 
     def predict(arg):
         img_path, img = arg
         h, w = img.shape[:2]
         if is_test:
-            h = int(h / 2)
-            w = int(w / 2)
+            h = int(h * test_scale)
+            w = int(w * test_scale)
             img = cv2.resize(img, (w, h))
         s = patch_size
         step = s - 32  # // 2
@@ -181,6 +181,7 @@ def main():
     arg('--limit', type=int, help='Use only N images for train/valid')
     arg('--min-scale', type=float, default=1)
     arg('--max-scale', type=float, default=1)
+    arg('--test-scale', type=float, default=0.5)
     args = parser.parse_args()
 
     coords = utils.load_coords()
@@ -222,7 +223,7 @@ def main():
             out_path = root.joinpath('test')
             out_path.mkdir(exist_ok=True)
             predict(model, test_paths, out_path, patch_size=args.patch_size,
-                    is_test=True)
+                    is_test=True, test_scale=args.test_scale)
         else:
             parser.error('Unexpected mode {}'.format(args.mode))
 
