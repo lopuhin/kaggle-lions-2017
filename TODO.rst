@@ -1,3 +1,7 @@
+Prediction scale:
+- 0.5 works best so far, 0.75 with sums is very poor
+- try 0.75 with blobs (unet-limit800-fold3-scale-0.5-1.5-test0.75-blobs.csv)
+
 Local validation:
 - try to change scale randomly
 
@@ -15,7 +19,7 @@ UNet training:
 - UNet hyperparameters:
     - filters_base
     - depth (via filter_factors)
-    - global avg/max pool on the last layer
+    - 4x/8x pool on the last layer
 - SGD
 - why doesn't dice work? Try harder: oversampling, larger targets
 - monitor regression loss

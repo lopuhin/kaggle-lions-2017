@@ -29,6 +29,7 @@ ALL_FEATURE_NAMES = ['x0', 'x1', 'y0', 'y1',
                      'sum', 'sum-0.04', 'sum-0.08', 'sum-0.25',
                      'blob-0.04', 'blob-0.04-sum', 'blob-0.08', 'blob-0.08-sum']
 FEATURE_NAMES = ['sum', 'sum-0.04', 'sum-0.08', 'sum-0.25']
+# FEATURE_NAMES = ['blob-0.04', 'blob-0.04-sum', 'blob-0.08', 'blob-0.08-sum']
 
 
 def load_xs_ys(pred_path: Path, coords: pd.DataFrame,
