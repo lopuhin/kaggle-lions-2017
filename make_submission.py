@@ -175,9 +175,10 @@ def train(all_ids, all_xs, all_ys, *regs,
                         eli5.explain_weights(reg, feature_names=FEATURE_NAMES),
                         show=('method', 'targets', 'feature_importances')))
             fitted_regs.append(fitted)
-    print('{}: mean patch RMSE {:.3f}, mean image RMSE {:.2f}, '
+    print('{} with {} features: mean patch RMSE {:.3f}, mean image RMSE {:.2f}, '
           'mean baseline RMSE {:.2f}'
-          .format(regs_name, np.mean(all_patch_rmse), np.mean(all_rmse),
+          .format(regs_name, ', '.join(FEATURE_NAMES),
+                  np.mean(all_patch_rmse), np.mean(all_rmse),
                   np.mean(all_baselines)))
     if save_to:
         joblib.dump(fitted_regs, save_to)
@@ -226,6 +227,7 @@ def main():
     arg('--limit', type=int)
     arg('--new-features', action='store_true')
     arg('--explain', action='store_true')
+    arg('--test-root', type=Path)
     args = parser.parse_args()
     model_path = args.root.joinpath('regressor.joblib')  # type: Path
     if args.mode == 'train':
@@ -244,8 +246,8 @@ def main():
         if args.predict_train:
             ids, xs, _ = load_all_features(args.root, only_valid=True, args=args)
         else:
-            ids, xs, _ = load_all_features(
-                args.root.joinpath('test'), only_valid=False, args=args)
+            test_root = args.test_root or args.root.joinpath('test')
+            ids, xs, _ = load_all_features(test_root, only_valid=False, args=args)
         predict(args.root, model_path, all_ids=ids, all_xs=xs,
                 concat_features=args.concat_features)
 
