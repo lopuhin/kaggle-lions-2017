@@ -8,11 +8,15 @@ Regression:
 
 Training data:
 - switch to coords-threeplusone-v0.4.csv
+- try a stratified split
 - check labels on more training images (to catch bad orientation)
 
 UNet training:
 - lr schedule
-- UNet hyperparameters
+- UNet hyperparameters:
+    - filters_base
+    - depth (via filter_factors)
+    - global avg/max pool on the last layer
 - SGD
 - why doesn't dice work? Try harder: oversampling, larger targets
 - monitor regression loss
