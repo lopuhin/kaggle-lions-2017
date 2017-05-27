@@ -173,6 +173,7 @@ def main():
     arg('--fold', type=int, default=1)
     arg('--dice-weight', type=float, default=0.0)
     arg('--n-folds', type=int, default=5)
+    arg('--stratified', action='store_true')
     arg('--mode', choices=[
         'train', 'validation', 'predict_valid', 'predict_test', 'predict_all_valid'],
         default='train')
@@ -185,7 +186,7 @@ def main():
     args = parser.parse_args()
 
     coords = utils.load_coords()
-    train_paths, valid_paths = utils.train_valid_split(args)
+    train_paths, valid_paths = utils.train_valid_split(args, coords)
     root = Path(args.root)
     model = UNet()
     model = utils.cuda(model)
