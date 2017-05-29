@@ -13,6 +13,7 @@ Regression:
 Training data:
 - try a stratified split
 - check labels on more training images (to catch bad orientation)
+- rotate imagees https://www.kaggle.com/threeplusone/sea-lion-coordinates/comments/comments#186374
 
 UNet training:
 - lr schedule
