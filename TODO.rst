@@ -1,14 +1,15 @@
 Prediction scale:
-- 0.5 works best so far, 0.75 with sums is very poor
-- try 0.75 with blobs (unet-limit800-fold3-scale-0.5-1.5-test0.75-blobs.csv)
+- check prediction quality on different scales
+- 0.5 works best so far, 0.75 with sums is very poor, blobs a tiny bit better but still bad
 
 Local validation:
-- try to change scale randomly
+- try to change validation scale randomly
 
 Regression:
+- visualize count predictions, or at least check them in the notebook
 - try to vary patch size (40 used to perform worse)
-- make blobs great again? currently sum is the best feature
-- any other ideas about how to prediction sea lion count
+- tune blobs generation once again?
+- any other ideas about how to predict the sea lion count?
 
 Training data:
 - try a stratified split
@@ -23,9 +24,9 @@ UNet training:
     - 4x/8x pool on the last layer
 - SGD
 - why doesn't dice work? Try harder: oversampling, larger targets
-- monitor regression loss
+- monitor regression loss (once validation is fixed)
 - try to separate close lions to count them (predict distance)
-- class weight
+- try class weight
 
 Performance:
 - downscale 4x or 2x in UNet output
