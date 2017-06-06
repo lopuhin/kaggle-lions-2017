@@ -3,7 +3,7 @@ import argparse
 from functools import partial
 import multiprocessing.pool
 from pathlib import Path
-from typing import Tuple, List
+from typing import Tuple, List, Dict
 
 import eli5
 from eli5.formatters.text import format_as_text
@@ -34,9 +34,16 @@ FEATURE_NAMES = ['sum', 'sum-0.04', 'sum-0.08', 'sum-0.25']
 
 def load_xs_ys(pred_path: Path, coords: pd.DataFrame,
                thresholds=(0.04, 0.08, 0.25), patch_size=80,
-               ) -> Tuple[int, np.ndarray, np.ndarray]:
+               ) -> Tuple[int, float, np.ndarray, np.ndarray]:
     pred = utils.load_pred(pred_path)
-    img_id = int(pred_path.name.split('-')[0])
+    path_parts = pred_path.name.split('-')[:-1]
+    if len(path_parts) == 2:
+        img_id, img_scale = path_parts
+    else:
+        img_id, = path_parts
+        img_scale = 1
+    img_id, img_scale = int(img_id), float(img_scale)
+    scale = img_scale * PRED_SCALE
     all_features, all_targets = [], []
     for cls in range(utils.N_CLASSES):
         cls_features, cls_targets = [], []
@@ -46,8 +53,8 @@ def load_xs_ys(pred_path: Path, coords: pd.DataFrame,
         try:
             img_coords = coords.loc[[img_id]]
             cls_coords = img_coords[img_coords.cls == cls]
-            cls_coords = list(zip(cls_coords.col / PRED_SCALE,
-                                  cls_coords.row / PRED_SCALE))
+            cls_coords = list(zip(cls_coords.col / scale,
+                                  cls_coords.row / scale))
         except KeyError:
             cls_coords = []
         cls_blobs = [[(x, y, cls_pred[int(np.round(y)), int(np.round(x))])
@@ -64,30 +71,26 @@ def load_xs_ys(pred_path: Path, coords: pd.DataFrame,
                 x0 = max(0, x0)
                 y0 = max(0, y0)
                 patch = cls_pred[y0: y1, x0: x1]
-                features = [x0, x1, y0, y1]
-                features.append(patch.sum())
+                features = [x0, x1, y0, y1, patch.sum()]
                 cls_features.append(features)
                 for i, threshold in enumerate(thresholds):
                     bin_mask = patch > threshold
                     if i + 1 < len(thresholds):
                         bin_mask &= patch < thresholds[i + 1]
                     features.append(bin_mask.sum())
-                # TODO - lookup
                 target = sum(x0 <= x < x1 and y0 <= y < y1 for x, y in cls_coords)
                 cls_targets.append(target)
                 for th_blobs in cls_blobs:
-                    # TODO - lookup
                     blob_count = blob_sum = 0
                     for x, y, value in th_blobs:
                         if x0 <= x < x1 and y0 <= y < y1:
                             blob_count += 1
                             blob_sum += value
                     features.extend([blob_count, blob_sum])
-    return img_id, np.array(all_features), np.array(all_targets)
+    return img_id, img_scale, np.array(all_features), np.array(all_targets)
 
 
-def load_all_features(root: Path, only_valid: bool, args,
-                      ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+def load_all_features(root: Path, only_valid: bool, args) -> Dict[str, np.ndarray]:
     features_path = root.joinpath('features.npz')  # type: Path
     coords = utils.load_coords()
     pred_paths = list(root.glob('*-pred.npy'))
@@ -98,28 +101,26 @@ def load_all_features(root: Path, only_valid: bool, args,
     if args.limit:
         pred_paths = pred_paths[:args.limit]
     if not args.new_features and features_path.exists():
-        print('Loading features...')
-        try:
-            data = np.load(str(features_path))
-            ids = [get_id(p) for p in pred_paths]
-            assert set(ids) == set(data['ids'][0])
-            return data['ids'], data['xs'], data['ys']
-        finally:
-            print('done loading features')
+        data = np.load(str(features_path))
+        ids = [get_id(p) for p in pred_paths]
+        assert set(ids) == set(data['ids'][0])
+        return data
     print('{} total'.format(len(pred_paths)))
-    all_xs, all_ys, all_ids = [[[] for _ in range(utils.N_CLASSES)] for _ in range(3)]
+    data = {k: [[] for _ in range(utils.N_CLASSES)]
+            for k in ['ids', 'scales', 'xs', 'ys']}
     with multiprocessing.pool.Pool(processes=16) as pool:
-        for id, xs, ys in tqdm.tqdm(
+        for id, scale, xs, ys in tqdm.tqdm(
                 pool.imap(partial(load_xs_ys, coords=coords), pred_paths, chunksize=2),
                 total=len(pred_paths)):
             for cls in range(utils.N_CLASSES):
-                all_xs[cls].extend(xs[cls])
-                all_ys[cls].extend(ys[cls])
-                all_ids[cls].extend([id] * len(ys[cls]))
-    ids, xs, ys = [np.array(lst) for lst in [all_ids, all_xs, all_ys]]
+                data['ids'][cls].extend([id] * len(ys[cls]))
+                data['scales'][cls].extend([scale] * len(ys[cls]))
+                data['xs'][cls].extend(xs[cls])
+                data['ys'][cls].extend(ys[cls])
+    data = {k: np.array(v) for k, v in data.items()}
     with features_path.open('wb') as f:
-        np.savez(f, ids=ids, xs=xs, ys=ys)
-    return ids, xs, ys
+        np.savez(f, **data)
+    return data
 
 
 def get_pred_by_id(ids, pred, unique_ids):
@@ -127,7 +128,7 @@ def get_pred_by_id(ids, pred, unique_ids):
     id_idx = {img_id: i for i, img_id in enumerate(unique_ids)}
     for img_id, x in zip(ids, pred):
         pred_by_id[id_idx[img_id]] += x
-    return pred_by_id / STEP_RATIO**2
+    return pred_by_id / STEP_RATIO**2 / 4  # this is the number of scales - FIXME!!!
 
 
 def train(all_ids, all_xs, all_ys, *regs,
@@ -142,6 +143,7 @@ def train(all_ids, all_xs, all_ys, *regs,
         ys = all_ys[cls]
         xs = input_features(concated_xs if concat_features else all_xs[cls])
         cv = GroupKFold(n_splits=5)
+        # TODO - split by scale too
         pred = average_predictions(
             [cross_val_predict(reg, xs, ys, cv=cv, groups=ids) for reg in regs])
         ys_by_id, pred_by_id = [], []
@@ -232,8 +234,8 @@ def main():
     args = parser.parse_args()
     model_path = args.root.joinpath('regressor.joblib')  # type: Path
     if args.mode == 'train':
-        ids, xs, ys = load_all_features(args.root, only_valid=True, args=args)
-        train(ids, xs, ys,
+        data = load_all_features(args.root, only_valid=True, args=args)
+        train(data['ids'], data['xs'], data['ys'],
               ExtraTreesRegressor(
                   n_estimators=100, max_depth=3, min_samples_split=10, n_jobs=8,
                   criterion='mse'),
@@ -245,11 +247,11 @@ def main():
               )
     elif args.mode == 'predict':
         if args.predict_train:
-            ids, xs, _ = load_all_features(args.root, only_valid=True, args=args)
+            data = load_all_features(args.root, only_valid=True, args=args)
         else:
             test_root = args.test_root or args.root.joinpath('test')
-            ids, xs, _ = load_all_features(test_root, only_valid=False, args=args)
-        predict(args.root, model_path, all_ids=ids, all_xs=xs,
+            data = load_all_features(test_root, only_valid=False, args=args)
+        predict(args.root, model_path, all_ids=data['ids'], all_xs=data['xs'],
                 concat_features=args.concat_features)
 
 
