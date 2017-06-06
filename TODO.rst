@@ -17,6 +17,7 @@ Training data:
 - rotate imagees https://www.kaggle.com/threeplusone/sea-lion-coordinates/comments/comments#186374
 
 UNet training:
+- try class weight (say 0.1 for no lion)
 - lr schedule
 - UNet hyperparameters:
     - filters_base
@@ -26,7 +27,6 @@ UNet training:
 - why doesn't dice work? Try harder: oversampling, larger targets
 - monitor regression loss (once validation is fixed)
 - try to separate close lions to count them (predict distance)
-- try class weight
 
 Performance:
 - downscale 4x or 2x in UNet output

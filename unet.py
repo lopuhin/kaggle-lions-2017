@@ -112,15 +112,15 @@ class SegmentationDataset(utils.BaseDataset):
 
 
 def predict(model, img_paths: List[Path], out_path: Path, patch_size: int,
-            is_test=False, test_scale=1.0):
+            is_test=False, test_scale=1.0, min_scale=None, max_scale=None):
     model.eval()
 
     def predict(arg):
-        img_path, img = arg
+        (img_path, img_scale), img = arg
         h, w = img.shape[:2]
-        if is_test:
-            h = int(h * test_scale)
-            w = int(w * test_scale)
+        if img_scale != 1:
+            h = int(h * img_scale)
+            w = int(w * img_scale)
             img = cv2.resize(img, (w, h))
         s = patch_size
         step = s - 32  # // 2
@@ -143,21 +143,32 @@ def predict(model, img_paths: List[Path], out_path: Path, patch_size: int,
                 pred_img[:, y: y + s, x: x + s] += pred
                 pred_count[y: y + s, x: x + s] += 1
         pred_img /= np.maximum(pred_count, 1)
-        return img_path, pred_img
+        return (img_path, img_scale), pred_img
+
+    if is_test:
+        scales = [test_scale]
+    else:
+        if min_scale and max_scale:
+            scales = np.linspace(min_scale, max_scale, 4)
+        else:
+            scales = [1]
+    paths_scales = [(p, s) for p in img_paths for s in scales]
 
     predictions = map(
         predict,
         utils.imap_fixed_output_buffer(
-            lambda p: (p, utils.load_image(p, cache=False)),
-            tqdm.tqdm(img_paths),
+            lambda x: (x, utils.load_image(x[0], cache=False)),
+            tqdm.tqdm(paths_scales),
             threads=2))
 
-    for img_path, pred_img in utils.imap_fixed_output_buffer(
-            lambda _: next(predictions), img_paths, threads=1):
+    for (img_path, img_scale), pred_img in utils.imap_fixed_output_buffer(
+            lambda _: next(predictions), paths_scales, threads=1):
         resized = np.stack([utils.downsample(p, PRED_SCALE) for p in pred_img])
         binarized = (resized * 1000).astype(np.uint16)
-        with gzip.open(str(out_path / '{}-pred.npy'.format(img_path.stem)), 'wb',
-                           compresslevel=4) as f:
+        with gzip.open(
+                str(out_path / '{}-{:.5f}-pred.npy'.format(
+                    img_path.stem, img_scale)),
+                'wb', compresslevel=4) as f:
             np.save(f, binarized)
 
 
@@ -213,12 +224,14 @@ def main():
                 SegmentationDataset, args, valid_paths, coords, deterministic=True)
             utils.validation(model, criterion, valid_loader)
         elif args.mode == 'predict_valid':
-            predict(model, valid_paths, out_path=root, patch_size=args.patch_size)
+            predict(model, valid_paths, out_path=root, patch_size=args.patch_size,
+                    min_scale=args.min_scale, max_scale=args.max_scale)
         elif args.mode == 'predict_all_valid':
             # include all paths we did not train on (makes sense only with --limit)
             valid_paths = list(
                 set(valid_paths) | (set(utils.labeled_paths()) - set(train_paths)))
-            predict(model, valid_paths, out_path=root, patch_size=args.patch_size)
+            predict(model, valid_paths, out_path=root, patch_size=args.patch_size,
+                    min_scale=args.min_scale, max_scale=args.max_scale)
         elif args.mode == 'predict_test':
             test_paths = list(utils.DATA_ROOT.joinpath('Test').glob('*.jpg'))
             out_path = root.joinpath('test')
