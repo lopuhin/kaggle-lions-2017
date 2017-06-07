@@ -142,7 +142,7 @@ def train_valid_split(args, coords) -> Tuple[List[Path], List[Path]]:
     if args.stratified:
         sorted_ids = coords['cls'].groupby(level=0).count().sort_values().index
         idx_by_id = {img_id: idx for idx, img_id in enumerate(sorted_ids)}
-        img_paths.sort(key=lambda p: idx_by_id[int(p.stem)])
+        img_paths.sort(key=lambda p: idx_by_id.get(int(p.stem), len(sorted_ids)))
         train, test = [], []
         for i, p in enumerate(img_paths):
             if i % args.n_folds == args.fold - 1:
