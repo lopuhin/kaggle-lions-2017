@@ -84,8 +84,14 @@ class UNet(nn.Module):
 
 
 class Loss:
-    def __init__(self, dice_weight=1.0):
-        self.nll_loss = nn.NLLLoss2d()
+    def __init__(self, dice_weight=1.0, bg_weight=1.0):
+        if bg_weight != 1.0:
+            nll_weight = torch.ones(utils.N_CLASSES + 1)
+            nll_weight[utils.N_CLASSES] = bg_weight
+            nll_weight = nll_weight.cuda()
+        else:
+            nll_weight = None
+        self.nll_loss = nn.NLLLoss2d(weight=nll_weight)
         self.dice_weight = dice_weight
 
     def __call__(self, outputs, targets):

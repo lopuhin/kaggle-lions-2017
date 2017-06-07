@@ -182,6 +182,7 @@ def main():
     arg('--lr', type=float, default=0.0001)
     arg('--workers', type=int, default=2)
     arg('--fold', type=int, default=1)
+    arg('--bg-weight', type=float, default=1.0, help='background weight')
     arg('--dice-weight', type=float, default=0.0)
     arg('--n-folds', type=int, default=5)
     arg('--stratified', action='store_true')
@@ -201,7 +202,7 @@ def main():
     root = Path(args.root)
     model = UNet()
     model = utils.cuda(model)
-    criterion = Loss(dice_weight=args.dice_weight)
+    criterion = Loss(dice_weight=args.dice_weight, bg_weight=args.bg_weight)
     if args.mode == 'train':
         kwargs = dict(min_scale=args.min_scale, max_scale=args.max_scale)
         train_loader, valid_loader = (
