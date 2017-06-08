@@ -67,7 +67,7 @@ class SegmentationDataset(utils.BaseDataset):
         scale_aug = not (self.min_scale == self.max_scale == 1)
         if scale_aug:
             scale = random.uniform(self.min_scale, self.max_scale)
-            s = int(np.round(s * scale))
+            s = int(np.round(s / scale))
         else:
             scale = 1
         b = int(np.ceil(np.sqrt(2) * s / 2))
@@ -91,7 +91,7 @@ class SegmentationDataset(utils.BaseDataset):
             ix, iy = col - x, row - y
             if (-b <= ix <= b + s) and (-b <= iy <= b + s):
                 p = rotate(Point(ix, iy), -angle, origin=(s // 2, s // 2))
-                ix, iy = int(p.x / scale), int(p.y / scale)
+                ix, iy = int(p.x * scale), int(p.y * scale)
                 mask[nneg(iy - self.mark_r): nneg(iy + self.mark_r),
                      nneg(ix - self.mark_r): nneg(ix + self.mark_r)] = cls
                 any_lions = True
@@ -112,7 +112,7 @@ class SegmentationDataset(utils.BaseDataset):
 
 
 def predict(model, img_paths: List[Path], out_path: Path, patch_size: int,
-            is_test=False, test_scale=1.0, min_scale=None, max_scale=None):
+            is_test=False, test_scale=1.0, min_scale=1.0, max_scale=1.0):
     model.eval()
 
     def predict(arg):
@@ -148,10 +148,10 @@ def predict(model, img_paths: List[Path], out_path: Path, patch_size: int,
     if is_test:
         scales = [test_scale]
     else:
-        if min_scale and max_scale:
+        if min_scale != max_scale:
             scales = np.linspace(min_scale, max_scale, 4)
         else:
-            scales = [1]
+            scales = [min_scale]
     paths_scales = [(p, s) for p in img_paths for s in scales]
 
     predictions = map(

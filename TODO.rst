@@ -1,6 +1,7 @@
 Prediction scale:
 - check prediction quality on different scales
 - 0.5 works best so far, 0.75 with sums is very poor, blobs a tiny bit better but still bad
+- train 0.8 -- 2 scale
 
 Local validation:
 - try to change validation scale randomly
@@ -17,16 +18,16 @@ Training data:
 - rotate imagees https://www.kaggle.com/threeplusone/sea-lion-coordinates/comments/comments#186374
 
 UNet training:
-- try class weight (say 0.1 for no lion)
-- lr schedule
-- UNet hyperparameters:
-    - filters_base
-    - depth (via filter_factors)
-    - 4x/8x pool on the last layer
+- automatic lr schedule
 - SGD
+- UNet hyperparameters:
+    - filters_base (not much diff?)
+    - depth via filter_factors (not much diff?)
+    - 4x/8x pool on the last layer (not much diff?)
+- try class weight, say 0.1 for no lion (bad)
 - why doesn't dice work? Try harder: oversampling, larger targets
-- monitor regression loss (once validation is fixed)
-- try to separate close lions to count them (predict distance)
+- monitor regression loss once validation is fixed
+- try to separate close lions to count them, predict distance?
 
 Performance:
 - downscale 4x or 2x in UNet output
