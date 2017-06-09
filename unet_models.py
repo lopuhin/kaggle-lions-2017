@@ -55,7 +55,7 @@ class UNet(nn.Module):
             if i != 0:
                 self.up.append(self.module(low_nf + nf, low_nf))
                 setattr(self, 'conv_up_{}'.format(i), self.up[-1])
-        bottom_s = 2
+        bottom_s = 4
         pool = nn.MaxPool2d(2, 2)
         pool_bottom = nn.MaxPool2d(bottom_s, bottom_s)
         upsample = nn.UpsamplingNearest2d(scale_factor=2)
