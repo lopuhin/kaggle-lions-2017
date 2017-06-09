@@ -2,6 +2,7 @@
 import argparse
 import json
 from pathlib import Path
+import random
 import shutil
 
 import numpy as np
@@ -106,10 +107,11 @@ class PointDataset(utils.BasePatchDataset):
             target_loc = np.zeros((2, s, s), dtype=np.float32)
             target_conf = np.zeros((s, s), dtype=np.int64)
             target_conf[:] = utils.N_CLASSES
+            random.shuffle(points)
             for cls, (x, y) in points:
-                if 0 <= x < s and 0 <= y < s:
+                if 0 <= x < patch_size and 0 <= y < patch_size:
                     x, y = x / scale, y / scale
-                    ix, iy = x // s, y // s
+                    ix, iy = int(x), int(y)
                     target_conf[iy, ix] = cls
                     target_loc[0, iy, ix] = x - ix
                     target_loc[1, iy, ix] = y - iy
