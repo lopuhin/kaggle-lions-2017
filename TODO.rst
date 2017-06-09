@@ -1,8 +1,6 @@
 Prediction scale:
-- train 1.0 -- 2 scale + lr schedule + stratified
-
-Local validation:
-- try to change validation scale randomly
+- train 1.0 -- 2 scale + lr schedule + stratified,
+  predict test at 0.5 with a small validation variation
 
 Regression:
 - visualize count predictions, or at least check them in the notebook
@@ -11,12 +9,10 @@ Regression:
 - any other ideas about how to predict the sea lion count?
 
 Training data:
-- try a stratified split
 - check labels on more training images (to catch bad orientation)
 - rotate imagees https://www.kaggle.com/threeplusone/sea-lion-coordinates/comments/comments#186374
 
 UNet training:
-- automatic lr schedule
 - SGD
 - UNet hyperparameters:
     - filters_base (not much diff?)
@@ -41,6 +37,7 @@ Test data:
 
 Other ideas:
 - check SOTA detection models - SSD, any other?
+- do dot regression (like SSD but without bounding boxes?)
 - check window classification once again - see car counting paper
 
 Later:
