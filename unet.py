@@ -116,7 +116,13 @@ def predict(model, img_paths: List[Path], out_path: Path, patch_size: int,
     model.eval()
 
     def predict(arg):
-        (img_path, img_scale), img = arg
+        img_path, img = arg
+        if is_test:
+            img_scale = test_scale
+        elif min_scale != max_scale:
+            img_scale = round(np.random.uniform(min_scale, max_scale), 5)
+        else:
+            img_scale = min_scale
         h, w = img.shape[:2]
         if img_scale != 1:
             h = int(h * img_scale)
@@ -145,24 +151,15 @@ def predict(model, img_paths: List[Path], out_path: Path, patch_size: int,
         pred_img /= np.maximum(pred_count, 1)
         return (img_path, img_scale), pred_img
 
-    if is_test:
-        scales = [test_scale]
-    else:
-        if min_scale != max_scale:
-            scales = np.linspace(min_scale, max_scale, 4)
-        else:
-            scales = [min_scale]
-    paths_scales = [(p, s) for p in img_paths for s in scales]
-
     predictions = map(
         predict,
         utils.imap_fixed_output_buffer(
-            lambda x: (x, utils.load_image(x[0], cache=False)),
-            tqdm.tqdm(paths_scales),
+            lambda p: (p, utils.load_image(p, cache=False)),
+            tqdm.tqdm(img_paths),
             threads=2))
 
     for (img_path, img_scale), pred_img in utils.imap_fixed_output_buffer(
-            lambda _: next(predictions), paths_scales, threads=1):
+            lambda _: next(predictions), img_paths, threads=1):
         resized = np.stack([utils.downsample(p, PRED_SCALE) for p in pred_img])
         binarized = (resized * 1000).astype(np.uint16)
         with gzip.open(

@@ -29,7 +29,7 @@ ALL_FEATURE_NAMES = ['x0', 'x1', 'y0', 'y1',
                      'sum', 'sum-0.04', 'sum-0.08', 'sum-0.25',
                      'blob-0.04', 'blob-0.04-sum', 'blob-0.08', 'blob-0.08-sum']
 FEATURE_NAMES = ['sum', 'sum-0.04', 'sum-0.08', 'sum-0.25']
-# FEATURE_NAMES = ['blob-0.04', 'blob-0.04-sum', 'blob-0.08', 'blob-0.08-sum']
+FEATURE_NAMES += ['blob-0.04', 'blob-0.04-sum', 'blob-0.08', 'blob-0.08-sum']
 
 
 def load_xs_ys(pred_path: Path, coords: pd.DataFrame,
@@ -43,7 +43,7 @@ def load_xs_ys(pred_path: Path, coords: pd.DataFrame,
         img_id, = path_parts
         img_scale = 1
     img_id, img_scale = int(img_id), float(img_scale)
-    scale = img_scale * PRED_SCALE
+    scale = PRED_SCALE / img_scale
     all_features, all_targets = [], []
     for cls in range(utils.N_CLASSES):
         cls_features, cls_targets = [], []
@@ -123,12 +123,12 @@ def load_all_features(root: Path, only_valid: bool, args) -> Dict[str, np.ndarra
     return data
 
 
-def get_pred_by_id(ids, pred, unique_ids):
+def get_pred_by_id(ids: np.ndarray, pred: np.ndarray, unique_ids) -> np.ndarray:
     pred_by_id = np.zeros(len(unique_ids))
     id_idx = {img_id: i for i, img_id in enumerate(unique_ids)}
     for img_id, x in zip(ids, pred):
         pred_by_id[id_idx[img_id]] += x
-    return pred_by_id / STEP_RATIO**2 / 4  # this is the number of scales - FIXME!!!
+    return np.divide(pred_by_id, STEP_RATIO**2)
 
 
 def train(all_ids, all_xs, all_ys, *regs,
@@ -143,7 +143,6 @@ def train(all_ids, all_xs, all_ys, *regs,
         ys = all_ys[cls]
         xs = input_features(concated_xs if concat_features else all_xs[cls])
         cv = GroupKFold(n_splits=5)
-        # TODO - split by scale too
         pred = average_predictions(
             [cross_val_predict(reg, xs, ys, cv=cv, groups=ids) for reg in regs])
         ys_by_id, pred_by_id = [], []
