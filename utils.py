@@ -17,6 +17,8 @@ import matplotlib.pyplot as plt
 import cv2
 import pandas as pd
 import numpy as np
+from shapely.geometry import Point
+from shapely.affinity import rotate
 import skimage.io
 import skimage.exposure
 from sklearn.model_selection import KFold
@@ -32,11 +34,16 @@ import tqdm
 
 N_CLASSES = 5
 
-
 cuda_is_available = torch.cuda.is_available()
+
+if cuda_is_available:
+    from torch.backends import cudnn
+    cudnn.benchmark = True
 
 
 def variable(x, volatile=False):
+    if isinstance(x, (list, tuple)):
+        return [variable(y, volatile=volatile) for y in x]
     return cuda(Variable(x, volatile=volatile))
 
 
@@ -173,9 +180,85 @@ class BaseDataset(Dataset):
                      for img_id, p in tqdm.tqdm(list(zip(self.img_ids, img_paths)),
                                                 desc='Images')}
         self.coords = coords.loc[self.img_ids].dropna()
+        self.coords_by_img_id = {}
+        for img_id in self.img_ids:
+            try:
+                coords = self.coords.loc[[img_id]]
+            except KeyError:
+                coords = []
+            self.coords_by_img_id[img_id] = coords
 
 
-def train(args, model: nn.Module, criterion, *, train_loader, valid_loader):
+class BasePatchDataset(BaseDataset):
+    def __init__(self,
+                 img_paths: List[Path],
+                 coords: pd.DataFrame,
+                 transform,
+                 size: int,
+                 min_scale: float=1.,
+                 max_scale: float=1.,
+                 deterministic: bool=False,
+                 ):
+        super().__init__(img_paths, coords)
+        self.patch_size = size
+        self.min_scale = min_scale
+        self.max_scale = max_scale
+        self.transform = transform
+        self.deterministic = deterministic
+
+    def __getitem__(self, idx):
+        if self.deterministic:
+            random.seed(idx)
+        while True:
+            pp = self.get_patch_points()
+            if pp is not None:
+                return self.new_x_y(*pp)
+
+    def new_x_y(self, patch, points):
+        """ Sample (x, y) pair.
+        """
+        raise NotImplementedError
+
+    def get_patch_points(self):
+        img_id = random.choice(self.img_ids)
+        img = self.imgs[img_id]
+        max_y, max_x = img.shape[:2]
+        s = self.patch_size
+        scale_aug = not (self.min_scale == self.max_scale == 1)
+        if scale_aug:
+            scale = random.uniform(self.min_scale, self.max_scale)
+            s = int(np.round(s / scale))
+        else:
+            scale = 1
+        b = int(np.ceil(np.sqrt(2) * s / 2))
+        x, y = (random.randint(b, max_x - (b + s)),
+                random.randint(b, max_y - (b + s)))
+        patch = img[y - b: y + b + s, x - b: x + b + s]
+        coords = self.coords_by_img_id[img_id]
+        angle = random.random() * 360
+        patch = rotated(patch, angle)
+        patch = patch[b:, b:][:s, :s]
+        if (patch == 0).sum() / s**2 > 0.02:
+            return None  # masked too much
+        if scale_aug:
+            patch = cv2.resize(patch, (self.patch_size, self.patch_size))
+        assert patch.shape == (self.patch_size, self.patch_size, 3), patch.shape
+        points = []
+        for cls, col, row in zip(coords.cls, coords.col, coords.row):
+            ix, iy = col - x, row - y
+            if (-b <= ix <= b + s) and (-b <= iy <= b + s):
+                p = rotate(Point(ix, iy), -angle, origin=(s // 2, s // 2))
+                points.append((cls, (p.x * scale, p.y * scale)))
+        return patch, points
+
+    def __len__(self):
+        patch_area = self.patch_size ** 2
+        return int(sum(img.shape[0] * img.shape[1] / patch_area
+                       for img in self.imgs.values()))
+
+
+def train(args, model: nn.Module, criterion, *, train_loader, valid_loader,
+          save_predictions=None):
     lr = args.lr
     make_optimizer = lambda: Adam(model.parameters(), lr=lr)
     optimizer = make_optimizer()
@@ -222,9 +305,6 @@ def train(args, model: nn.Module, criterion, *, train_loader, valid_loader):
             for i, (inputs, targets) in enumerate(tl):
                 inputs, targets = variable(inputs), variable(targets)
                 outputs = model(inputs)
-                is_classifier = len(targets.size()) == 1
-                if is_classifier:
-                    outputs = outputs.view(outputs.size(0), -1)
                 loss = criterion(outputs, targets)
                 optimizer.zero_grad()
                 batch_size = inputs.size(0)
@@ -237,7 +317,7 @@ def train(args, model: nn.Module, criterion, *, train_loader, valid_loader):
                 tq.set_postfix(loss='{:.3f}'.format(mean_loss))
                 if i and i % report_each == 0:
                     write_event(log, step, loss=mean_loss)
-                    if i % save_prediction_each == 0 and not is_classifier:
+                    if save_predictions and i % save_prediction_each == 0:
                         save_predictions(root, inputs, targets, outputs)
             write_event(log, step, loss=mean_loss)
             tq.close()
@@ -266,44 +346,6 @@ def rotated(patch, angle):
     center = tuple(np.array(size) / 2)
     rot_mat = cv2.getRotationMatrix2D(center, angle, 1.0)
     return cv2.warpAffine(patch, rot_mat, size, flags=cv2.INTER_LINEAR)
-
-
-def save_predictions(root: Path, inputs, targets, outputs):
-    batch_size = inputs.size(0)
-    inputs_data = inputs.data.cpu().numpy().transpose([0, 2, 3, 1])
-    outputs_data = outputs.data.cpu().numpy()
-    targets_data = targets.data.cpu().numpy()
-    outputs_probs = np.exp(outputs_data)
-    for i in range(batch_size):
-        prefix = str(root.joinpath(str(i).zfill(2)))
-        save_image(
-            '{}-input.jpg'.format(prefix),
-            skimage.exposure.rescale_intensity(inputs_data[i], out_range=(0, 1)))
-        save_image(
-            '{}-output.jpg'.format(prefix), colored_prediction(outputs_probs[i]))
-        target_one_hot = np.stack([targets_data[i] == cls for cls in range(N_CLASSES)])
-        save_image(
-            '{}-target.jpg'.format(prefix),
-            colored_prediction(target_one_hot.astype(np.float32)))
-
-
-def colored_prediction(prediction: np.ndarray) -> np.ndarray:
-    colors = [
-        [1., 0., 0.],  # red: adult males
-        [1., 0., 1.],  # magenta: subadult males
-        [0.647, 0.1647, 0.1647],  # brown: adult females
-        [0., 0., 1.],  # blue: juveniles
-        [0., 1., 0.],  # green: pups
-    ]
-    h, w = prediction.shape[1:]
-    planes = []
-    for cls, color in enumerate(colors):
-        plane = np.rollaxis(np.array(color * h * w).reshape(h, w, 3), 2)
-        plane *= prediction[cls]
-        planes.append(plane)
-    colored = np.sum(planes, axis=0)
-    colored = np.clip(colored, 0, 1)
-    return colored.transpose(1, 2, 0)
 
 
 def save_image(fname, data):
