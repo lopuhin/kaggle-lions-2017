@@ -30,13 +30,14 @@ class SSPD(nn.Module):
         for k in range(23):
             x = self.vgg[k](x)
         xs = [self.l2_norm(x)]
+        x = F.max_pool2d(x, kernel_size=2, stride=1, padding=1)[:, :, :-1, :-1]
         # apply the rest of vgg
-        for k in range(24, 31):
+        for k in range(24, 30):  # skip maxpool - applied above
             x = self.vgg[k](x)
         xs.append(x)
+        x = F.max_pool2d(x, kernel_size=2, stride=1, padding=1)[:, :, :-1, :-1]
         x = F.relu(self.conv1_1(x))
         x = F.relu(self.conv1_2(x))
-        x = F.max_pool2d(x, kernel_size=2)
         xs.append(x)
         assert len(xs) == len(self.multipoints)
         loc_preds, conf_preds = [], []
@@ -54,13 +55,11 @@ class SSPDLoss:
 
     def __call__(self, outputs, targets):
         loc_preds, conf_preds = outputs
-        loc_targets, conf_targets = targets
-        assert len(loc_preds) == len(loc_targets)
-        assert len(conf_preds) == len(conf_targets)
+        loc_target, conf_target = targets
         loc_loss = sum(self.loc_loss(loc_pred, loc_target)
-                       for loc_pred, loc_target in zip(loc_preds, loc_targets))
+                       for loc_pred in loc_preds)
         conf_loss = sum(self.conf_loss(conf_pred, conf_target)
-                        for conf_pred, conf_target in zip(conf_preds, conf_targets))
+                        for conf_pred in conf_preds)
         return loc_loss + conf_loss
 
 
@@ -99,27 +98,22 @@ class PointDataset(utils.BasePatchDataset):
         """ Sample (x, y) pair.
         """
         patch_size = patch.shape[0]
-        target_locs = []
-        target_confs = []
-        for scale in [8, 16, 32]:
-            assert patch_size % scale == 0
-            s = patch_size // scale
-            target_loc = np.zeros((2, s, s), dtype=np.float32)
-            target_conf = np.zeros((s, s), dtype=np.int64)
-            target_conf[:] = utils.N_CLASSES
-            random.shuffle(points)
-            for cls, (x, y) in points:
-                if 0 <= x < patch_size and 0 <= y < patch_size:
-                    x, y = x / scale, y / scale
-                    ix, iy = int(x), int(y)
-                    target_conf[iy, ix] = cls
-                    target_loc[0, iy, ix] = x - ix
-                    target_loc[1, iy, ix] = y - iy
-            target_locs.append(target_loc)
-            target_confs.append(target_conf)
+        scale = 8
+        assert patch_size % scale == 0
+        s = patch_size // scale
+        target_loc = np.zeros((2, s, s), dtype=np.float32)
+        target_conf = np.zeros((s, s), dtype=np.int64)
+        target_conf[:] = utils.N_CLASSES
+        random.shuffle(points)
+        for cls, (x, y) in points:
+            if 0 <= x < patch_size and 0 <= y < patch_size:
+                x, y = x / scale, y / scale
+                ix, iy = int(x), int(y)
+                target_conf[iy, ix] = cls
+                target_loc[0, iy, ix] = x - ix
+                target_loc[1, iy, ix] = y - iy
         return (self.transform(patch),
-                ([torch.from_numpy(tl) for tl in target_locs],
-                 [torch.from_numpy(tc) for tc in target_confs]))
+                (torch.from_numpy(target_loc), torch.from_numpy(target_conf)))
 
 
 def main():
