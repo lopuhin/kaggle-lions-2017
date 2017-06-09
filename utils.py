@@ -176,7 +176,9 @@ class BaseDataset(Dataset):
 
 
 def train(args, model: nn.Module, criterion, *, train_loader, valid_loader):
-    optimizer = Adam(model.parameters(), lr=args.lr)
+    lr = args.lr
+    make_optimizer = lambda: Adam(model.parameters(), lr=lr)
+    optimizer = make_optimizer()
 
     root = Path(args.root)
     model_path = root / 'model.pt'
@@ -204,12 +206,13 @@ def train(args, model: nn.Module, criterion, *, train_loader, valid_loader):
     save_prediction_each = report_each * 10
     root = Path(args.root)
     log = root.joinpath('train.log').open('at', encoding='utf8')
+    valid_losses = []
     for epoch in range(epoch, args.n_epochs + 1):
         model.train()
         random.seed()
         tq = tqdm.tqdm(total=(args.epoch_size or
                               len(train_loader) * args.batch_size))
-        tq.set_description('Epoch {}'.format(epoch))
+        tq.set_description('Epoch {}, lr {}'.format(epoch, lr))
         losses = []
         tl = train_loader
         if args.epoch_size:
@@ -242,9 +245,14 @@ def train(args, model: nn.Module, criterion, *, train_loader, valid_loader):
             valid_metrics = validation(model, criterion, valid_loader)
             write_event(log, step, **valid_metrics)
             valid_loss = valid_metrics['valid_loss']
+            valid_losses.append(valid_loss)
             if valid_loss < best_valid_loss:
                 best_valid_loss = valid_loss
                 shutil.copy(str(model_path), str(best_model_path))
+            elif len(valid_losses) > 2 and min(valid_losses[-2:]) > best_valid_loss:
+                # two epochs without improvement
+                lr /= 5
+                optimizer = make_optimizer()
         except KeyboardInterrupt:
             tq.close()
             print('Ctrl+C, saving snapshot')

@@ -1,7 +1,5 @@
 Prediction scale:
-- check prediction quality on different scales
-- 0.5 works best so far, 0.75 with sums is very poor, blobs a tiny bit better but still bad
-- train 0.8 -- 2 scale
+- train 1.0 -- 2 scale + lr schedule + stratified
 
 Local validation:
 - try to change validation scale randomly
