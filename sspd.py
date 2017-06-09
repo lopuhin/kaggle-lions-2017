@@ -32,6 +32,7 @@ class SSPD(nn.Module):
         xs = [self.l2_norm(x)]
         x = F.max_pool2d(x, kernel_size=2, stride=1, padding=1)[:, :, :-1, :-1]
         # apply the rest of vgg
+        # TODO - add skip connections somewhere here to help with localization
         for k in range(24, 30):  # skip maxpool - applied above
             x = self.vgg[k](x)
         xs.append(x)
@@ -56,6 +57,7 @@ class SSPDLoss:
     def __call__(self, outputs, targets):
         loc_preds, conf_preds = outputs
         loc_target, conf_target = targets
+        # TODO - ideally, zero loc_preds where conf_target == utils.N_CLASSES
         loc_loss = sum(self.loc_loss(loc_pred, loc_target)
                        for loc_pred in loc_preds)
         conf_loss = sum(self.conf_loss(conf_pred, conf_target)
