@@ -15,6 +15,7 @@ import warnings
 import matplotlib.pyplot as plt
 
 import cv2
+import json_lines
 import pandas as pd
 import numpy as np
 import skimage.io
@@ -383,8 +384,8 @@ def plot(*args, ymin=None, ymax=None, xmin=None, xmax=None, params=False,
         plt.xlim(**xlim_kw)
     for path in sorted(paths):
         path = Path(path)
-        with path.joinpath('train.log').open() as f:
-            events = [json.loads(line) for line in f]
+        with json_lines.open(str(path.joinpath('train.log')), broken=True) as f:
+            events = list(f)
         if params:
             print(path)
             pprint(json.loads(path.joinpath('params.json').read_text()))
