@@ -354,6 +354,15 @@ def save_image(fname, data):
         skimage.io.imsave(fname, data)
 
 
+CLS_COLORS = [
+    [1., 0., 0.],  # red: adult males
+    [1., 0., 1.],  # magenta: subadult males
+    [0.647, 0.1647, 0.1647],  # brown: adult females
+    [0., 0., 1.],  # blue: juveniles
+    [0., 1., 0.],  # green: pups
+]
+
+
 def validation(model: nn.Module, criterion, valid_loader) -> Dict[str, float]:
     model.eval()
     losses = []

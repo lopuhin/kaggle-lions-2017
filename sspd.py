@@ -7,6 +7,7 @@ import shutil
 
 import numpy as np
 import torch
+import skimage.exposure
 from torch import nn
 from torch.nn import functional as F, init
 from torchvision.models import vgg16
@@ -118,6 +119,48 @@ class PointDataset(utils.BasePatchDataset):
                 (torch.from_numpy(target_loc), torch.from_numpy(target_conf)))
 
 
+def save_predictions(root: Path, inputs, targets, outputs):
+    batch_size = inputs.size(0)
+    to_numpy = lambda x: x.data.cpu().numpy()
+    inputs_data = to_numpy(inputs).transpose([0, 2, 3, 1])
+    target_locs, target_confs = map(to_numpy, targets)
+    all_pred_locs = [to_numpy(x) for x in outputs[0]]
+    all_pred_confs = [to_numpy(F.softmax(x)) for x in outputs[1]]
+    s = target_locs.shape[3]
+    patch_size = inputs_data.shape[1]
+    nneg = lambda x: max(0, x)
+    m = 4
+    for i in range(batch_size):
+        prefix = str(root.joinpath(str(i).zfill(2)))
+        utils.save_image(
+            '{}-input.jpg'.format(prefix),
+            skimage.exposure.rescale_intensity(inputs_data[i], out_range=(0, 1)))
+        target_img = np.zeros((patch_size, patch_size, 3), dtype=np.float32)
+        for ix in range(s):
+            for iy in range(s):
+                cls = target_confs[i, iy, ix]
+                if cls != utils.N_CLASSES:
+                    x, y = target_locs[i, :, iy, ix]
+                    x, y = [int(patch_size / s * v) for v in [ix + x, iy + y]]
+                    target_img[nneg(y - m) : y + m, nneg(x - m) : x + m, :] = (
+                        utils.CLS_COLORS[cls])
+        utils.save_image('{}-target.jpg'.format(prefix), target_img)
+        output_img = np.zeros((patch_size, patch_size, 3), dtype=np.float32)
+        for pred_locs, pred_confs in zip(all_pred_locs, all_pred_confs):
+            for ix in range(s):
+                for iy in range(s):
+                    probs = pred_confs[i, :, iy, ix]
+                    if probs[utils.N_CLASSES] < 0.99:
+                        x, y = pred_locs[i, :, iy, ix]
+                        x, y = [int(patch_size / s * v) for v in [ix + x, iy + y]]
+                        color = np.zeros(3, dtype=np.float)
+                        for cls, prob in enumerate(probs[:utils.N_CLASSES]):
+                            color += np.array(utils.CLS_COLORS[cls]) * prob
+                        output_img[
+                            nneg(y - m) : y + m, nneg(x - m) : x + m, :] += color
+        utils.save_image('{}-output.jpg'.format(prefix), np.clip(output_img, 0, 1))
+
+
 def main():
     parser = argparse.ArgumentParser()
     arg = parser.add_argument
@@ -162,7 +205,8 @@ def main():
         root.joinpath('params.json').write_text(
             json.dumps(vars(args), indent=True, sort_keys=True))
         utils.train(args, model, criterion,
-                    train_loader=train_loader, valid_loader=valid_loader)
+                    train_loader=train_loader, valid_loader=valid_loader,
+                    save_predictions=save_predictions)
 
 if __name__ == '__main__':
     main()

@@ -125,16 +125,9 @@ def save_predictions(root: Path, inputs, targets, outputs):
 
 
 def colored_prediction(prediction: np.ndarray) -> np.ndarray:
-    colors = [
-        [1., 0., 0.],  # red: adult males
-        [1., 0., 1.],  # magenta: subadult males
-        [0.647, 0.1647, 0.1647],  # brown: adult females
-        [0., 0., 1.],  # blue: juveniles
-        [0., 1., 0.],  # green: pups
-    ]
     h, w = prediction.shape[1:]
     planes = []
-    for cls, color in enumerate(colors):
+    for cls, color in enumerate(utils.CLS_COLORS):
         plane = np.rollaxis(np.array(color * h * w).reshape(h, w, 3), 2)
         plane *= prediction[cls]
         planes.append(plane)
