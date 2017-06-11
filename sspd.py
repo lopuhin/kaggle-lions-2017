@@ -22,7 +22,7 @@ class SSPD(nn.Module):
         self.vgg = vgg16(pretrained=True).features
         self.conv1_1 = nn.Conv2d(512, 512, kernel_size=3, padding=1)
         self.conv1_2 = nn.Conv2d(512, 512, kernel_size=3, padding=1)
-        self.multipoints = [MultiPoint(512) for _ in range(3)]
+        self.multipoints = nn.ModuleList([MultiPoint(512) for _ in range(3)])
         self.l2_norm = L2Norm(512, 20)
 
     def forward(self, x):
