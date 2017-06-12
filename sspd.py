@@ -23,7 +23,8 @@ class SSPD(nn.Module):
         self.vgg = vgg16(pretrained=True).features
         self.conv1_1 = nn.Conv2d(512, 512, kernel_size=3, padding=1)
         self.conv1_2 = nn.Conv2d(512, 512, kernel_size=3, padding=1)
-        self.multipoints = nn.ModuleList([MultiPoint(512) for _ in range(3)])
+        self.multipoints = nn.ModuleList(
+            [MultiPoint(512 if i == 0 else 1024) for i in range(3)])
         self.l2_norm = L2Norm(512, 20)
 
     def forward(self, x):
@@ -33,7 +34,6 @@ class SSPD(nn.Module):
         xs = [self.l2_norm(x)]
         x = F.max_pool2d(x, kernel_size=2, stride=1, padding=1)[:, :, :-1, :-1]
         # apply the rest of vgg
-        # TODO - add skip connections somewhere here to help with localization
         for k in range(24, 30):  # skip maxpool - applied above
             x = self.vgg[k](x)
         xs.append(x)
@@ -43,7 +43,8 @@ class SSPD(nn.Module):
         xs.append(x)
         assert len(xs) == len(self.multipoints)
         loc_preds, conf_preds = [], []
-        for mp, x in zip(self.multipoints, xs):
+        for i, (mp, x) in enumerate(zip(self.multipoints, xs)):
+            x = x if i == 0 else torch.cat([x, xs[i - 1]], 1)
             loc, conf = mp(x)
             loc_preds.append(loc)
             conf_preds.append(conf)
