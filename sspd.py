@@ -52,18 +52,31 @@ class SSPD(nn.Module):
 
 class SSPDLoss:
     def __init__(self):
-        self.loc_loss = nn.MSELoss()
+        self.loc_loss = nn.MSELoss(size_average=False)
         self.conf_loss = nn.CrossEntropyLoss()
+        non_bg_weight = torch.ones(utils.N_CLASSES + 1)
+        non_bg_weight[utils.N_CLASSES] = 0.1
+        non_bg_weight = non_bg_weight.cuda()
+        self.non_bg_conf_loss = nn.CrossEntropyLoss(
+            size_average=False, weight=non_bg_weight)
 
     def __call__(self, outputs, targets):
         loc_preds, conf_preds = outputs
         loc_target, conf_target = targets
-        # TODO - ideally, zero loc_preds where conf_target == utils.N_CLASSES
-        loc_loss = sum(self.loc_loss(loc_pred, loc_target)
-                       for loc_pred in loc_preds)
+        non_bg = conf_target != utils.N_CLASSES
+        n_non_bg = int(non_bg.sum().data[0])
+        if n_non_bg == 0:
+            loc_loss = non_bg_conf_loss = 0
+        else:
+            non_bg_loc = non_bg.unsqueeze(1).expand_as(loc_preds[0]).float()
+            # do not need loc predictions from non-bg classes
+            loc_loss = sum(self.loc_loss(loc_pred * non_bg_loc, loc_target)
+                           for loc_pred in loc_preds) / n_non_bg
+            non_bg_conf_loss = sum(self.non_bg_conf_loss(conf_pred, conf_target)
+                                   for conf_pred in conf_preds) / n_non_bg
         conf_loss = sum(self.conf_loss(conf_pred, conf_target)
                         for conf_pred in conf_preds)
-        return loc_loss + conf_loss
+        return conf_loss + loc_loss + non_bg_conf_loss
 
 
 class MultiPoint(nn.Module):
@@ -119,7 +132,7 @@ class PointDataset(utils.BasePatchDataset):
                 (torch.from_numpy(target_loc), torch.from_numpy(target_conf)))
 
 
-def save_predictions(root: Path, inputs, targets, outputs):
+def save_predictions(root: Path, n: float, inputs, targets, outputs):
     batch_size = inputs.size(0)
     to_numpy = lambda x: x.data.cpu().numpy()
     inputs_data = to_numpy(inputs).transpose([0, 2, 3, 1])
@@ -131,7 +144,7 @@ def save_predictions(root: Path, inputs, targets, outputs):
     nneg = lambda x: max(0, x)
     m = 4
     for i in range(batch_size):
-        prefix = str(root.joinpath(str(i).zfill(2)))
+        prefix = str(root.joinpath('{}-{}'.format(str(n).zfill(6), str(i).zfill(2))))
         utils.save_image(
             '{}-input.jpg'.format(prefix),
             skimage.exposure.rescale_intensity(inputs_data[i], out_range=(0, 1)))

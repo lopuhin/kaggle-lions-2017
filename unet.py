@@ -104,14 +104,14 @@ def predict(model, img_paths: List[Path], out_path: Path, patch_size: int,
             np.save(f, binarized)
 
 
-def save_predictions(root: Path, inputs, targets, outputs):
+def save_predictions(root: Path, n: int, inputs, targets, outputs):
     batch_size = inputs.size(0)
     inputs_data = inputs.data.cpu().numpy().transpose([0, 2, 3, 1])
     outputs_data = outputs.data.cpu().numpy()
     targets_data = targets.data.cpu().numpy()
     outputs_probs = np.exp(outputs_data)
     for i in range(batch_size):
-        prefix = str(root.joinpath(str(i).zfill(2)))
+        prefix = str(root.joinpath('{}-{}'.format(str(n).zfill(6), str(i).zfill(2))))
         utils.save_image(
             '{}-input.jpg'.format(prefix),
             skimage.exposure.rescale_intensity(inputs_data[i], out_range=(0, 1)))

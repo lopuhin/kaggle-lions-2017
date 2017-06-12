@@ -1,6 +1,11 @@
+SSPD training:
+- tune lr
+- save more predictions during training
+- try SGD
+
 Prediction scale:
 - train 1.0 -- 2 scale + lr schedule + stratified,
-  predict test at 0.5 with a small validation variation
+  predict test at 0.5 with a small validation variation -- bad :(
 
 Regression:
 - visualize count predictions, or at least check them in the notebook
