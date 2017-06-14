@@ -1,7 +1,5 @@
-SSPD training:
-- tune lr
-- save more predictions during training
-- try SGD
+Try predicting scale
+Try predicting borders - check original UNet paper
 
 Prediction scale:
 - train 1.0 -- 2 scale + lr schedule + stratified,
