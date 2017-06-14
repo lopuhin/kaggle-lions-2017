@@ -37,10 +37,6 @@ N_CLASSES = 5
 
 cuda_is_available = torch.cuda.is_available()
 
-if cuda_is_available:
-    from torch.backends import cudnn
-    cudnn.benchmark = True
-
 
 def variable(x, volatile=False):
     if isinstance(x, (list, tuple)):
