@@ -10,10 +10,8 @@ from typing import List
 from make_submission import PRED_SCALE
 
 import cv2
-import pandas as pd
 import numpy as np
-from shapely.geometry import Point
-from shapely.affinity import rotate
+import skimage.exposure
 import torch
 import tqdm
 
@@ -21,94 +19,31 @@ import utils
 from unet_models import UNet, Loss
 
 
-class SegmentationDataset(utils.BaseDataset):
-    def __init__(self,
-                 img_paths: List[Path],
-                 coords: pd.DataFrame,
-                 transform,
-                 size: int,
-                 mark_r: int=8,
-                 min_scale: float=1.,
-                 max_scale: float=1.,
-                 debug: bool=False,
-                 deterministic: bool=False,
-                 ):
-        super().__init__(img_paths, coords)
-        self.patch_size = size
+class SegmentationDataset(utils.BasePatchDataset):
+    def __init__(self, *args, mark_r: int=8, debug: bool=False, **kwargs):
+        super().__init__(*args, **kwargs)
         self.mark_r = mark_r
-        self.min_scale = min_scale
-        self.max_scale = max_scale
-        self.transform = transform
         self.debug = debug
-        self.deterministic = deterministic
-        self.coords_by_img_id = {}
-        for img_id in self.img_ids:
-            try:
-                coords = self.coords.loc[[img_id]]
-            except KeyError:
-                coords = []
-            self.coords_by_img_id[img_id] = coords
 
-    def __getitem__(self, idx):
-        if self.deterministic:
-            random.seed(idx)
-        while True:
-            x = self.new_x_y()
-            if x is not None:
-                return x
-
-    def new_x_y(self):
+    def new_x_y(self, patch, points):
         """ Sample (x, y) pair.
         """
-        img_id = random.choice(self.img_ids)
-        img = self.imgs[img_id]
-        max_y, max_x = img.shape[:2]
-        s = self.patch_size
-        scale_aug = not (self.min_scale == self.max_scale == 1)
-        if scale_aug:
-            scale = random.uniform(self.min_scale, self.max_scale)
-            s = int(np.round(s / scale))
-        else:
-            scale = 1
-        b = int(np.ceil(np.sqrt(2) * s / 2))
-        x, y = (random.randint(b, max_x - (b + s)),
-                random.randint(b, max_y - (b + s)))
-        patch = img[y - b: y + b + s, x - b: x + b + s]
-        coords = self.coords_by_img_id[img_id]
-        any_lions = False
-        angle = random.random() * 360
-        patch = utils.rotated(patch, angle)
-        patch = patch[b:, b:][:s, :s]
-        if (patch == 0).sum() / s**2 > 0.02:
-            return None  # masked too much
-        if scale_aug:
-            patch = cv2.resize(patch, (self.patch_size, self.patch_size))
-        assert patch.shape == (self.patch_size, self.patch_size, 3), patch.shape
         mask = np.zeros((self.patch_size, self.patch_size), dtype=np.int64)
         mask[:] = utils.N_CLASSES
         nneg = lambda x: max(0, x)
-        for cls, col, row in zip(coords.cls, coords.col, coords.row):
-            ix, iy = col - x, row - y
-            if (-b <= ix <= b + s) and (-b <= iy <= b + s):
-                p = rotate(Point(ix, iy), -angle, origin=(s // 2, s // 2))
-                ix, iy = int(p.x * scale), int(p.y * scale)
-                mask[nneg(iy - self.mark_r): nneg(iy + self.mark_r),
-                     nneg(ix - self.mark_r): nneg(ix + self.mark_r)] = cls
-                any_lions = True
+        for cls, (x, y) in points:
+            ix, iy = int(x), int(y)
+            mask[nneg(iy - self.mark_r): nneg(iy + self.mark_r),
+                 nneg(ix - self.mark_r): nneg(ix + self.mark_r)] = cls
         if random.random() < 0.5:
             patch = np.flip(patch, axis=1).copy()
             mask = np.flip(mask, axis=1).copy()
-        if self.debug and any_lions:
+        if self.debug and points:
             for cls in range(utils.N_CLASSES):
                 utils.save_image('mask-{}.jpg'.format(cls),
                                  (mask == cls).astype(np.float32))
             utils.save_image('patch.jpg', patch)
         return self.transform(patch), torch.from_numpy(mask)
-
-    def __len__(self):
-        patch_area = self.patch_size ** 2
-        return int(sum(img.shape[0] * img.shape[1] / patch_area
-                       for img in self.imgs.values()))
 
 
 def predict(model, img_paths: List[Path], out_path: Path, patch_size: int,
@@ -169,6 +104,38 @@ def predict(model, img_paths: List[Path], out_path: Path, patch_size: int,
             np.save(f, binarized)
 
 
+def save_predictions(root: Path, n: int, inputs, targets, outputs):
+    batch_size = inputs.size(0)
+    inputs_data = inputs.data.cpu().numpy().transpose([0, 2, 3, 1])
+    outputs_data = outputs.data.cpu().numpy()
+    targets_data = targets.data.cpu().numpy()
+    outputs_probs = np.exp(outputs_data)
+    for i in range(batch_size):
+        prefix = str(root.joinpath('{}-{}'.format(str(n).zfill(6), str(i).zfill(2))))
+        utils.save_image(
+            '{}-input.jpg'.format(prefix),
+            skimage.exposure.rescale_intensity(inputs_data[i], out_range=(0, 1)))
+        utils.save_image(
+            '{}-output.jpg'.format(prefix), colored_prediction(outputs_probs[i]))
+        target_one_hot = np.stack(
+            [targets_data[i] == cls for cls in range(utils.N_CLASSES)])
+        utils.save_image(
+            '{}-target.jpg'.format(prefix),
+            colored_prediction(target_one_hot.astype(np.float32)))
+
+
+def colored_prediction(prediction: np.ndarray) -> np.ndarray:
+    h, w = prediction.shape[1:]
+    planes = []
+    for cls, color in enumerate(utils.CLS_COLORS):
+        plane = np.rollaxis(np.array(color * h * w).reshape(h, w, 3), 2)
+        plane *= prediction[cls]
+        planes.append(plane)
+    colored = np.sum(planes, axis=0)
+    colored = np.clip(colored, 0, 1)
+    return colored.transpose(1, 2, 0)
+
+
 def main():
     parser = argparse.ArgumentParser()
     arg = parser.add_argument
@@ -214,7 +181,8 @@ def main():
         root.joinpath('params.json').write_text(
             json.dumps(vars(args), indent=True, sort_keys=True))
         utils.train(args, model, criterion,
-                    train_loader=train_loader, valid_loader=valid_loader)
+                    train_loader=train_loader, valid_loader=valid_loader,
+                    save_predictions=save_predictions)
     else:
         utils.load_best_model(model, root)
         if args.mode == 'validation':
