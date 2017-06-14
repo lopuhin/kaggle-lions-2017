@@ -194,12 +194,14 @@ class BasePatchDataset(BaseDataset):
                  size: int,
                  min_scale: float=1.,
                  max_scale: float=1.,
+                 oversample: float=0.,
                  deterministic: bool=False,
                  ):
         super().__init__(img_paths, coords)
         self.patch_size = size
         self.min_scale = min_scale
         self.max_scale = max_scale
+        self.oversample = oversample
         self.transform = transform
         self.deterministic = deterministic
 
@@ -227,11 +229,23 @@ class BasePatchDataset(BaseDataset):
             s = int(np.round(s / scale))
         else:
             scale = 1
-        b = int(np.ceil(np.sqrt(2) * s / 2))
-        x, y = (random.randint(b, max_x - (b + s)),
-                random.randint(b, max_y - (b + s)))
-        patch = img[y - b: y + b + s, x - b: x + b + s]
         coords = self.coords_by_img_id[img_id]
+        b = int(np.ceil(np.sqrt(2) * s / 2))
+        sampled = False
+        if self.oversample and len(coords) > 0 and random.random() < self.oversample:
+            item = coords.iloc[random.randint(0, len(coords) - 1)]
+            x0, y0 = item.col, item.row
+            try:
+                x = random.randint(max(x0 - s, b), min(x0 + s, max_x - (b + s)))
+                y = random.randint(max(y0 - s, b), min(y0 + s, max_y - (b + s)))
+            except ValueError:
+                pass  # this can happen with large x0 or y0
+            else:
+                sampled = True
+        if not sampled:
+            x = random.randint(b, max_x - (b + s))
+            y = random.randint(b, max_y - (b + s))
+        patch = img[y - b: y + b + s, x - b: x + b + s]
         angle = random.random() * 360
         patch = rotated(patch, angle)
         patch = patch[b:, b:][:s, :s]

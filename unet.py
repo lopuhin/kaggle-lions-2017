@@ -159,6 +159,7 @@ def main():
     arg('--min-scale', type=float, default=1)
     arg('--max-scale', type=float, default=1)
     arg('--test-scale', type=float, default=0.5)
+    arg('--oversample', type=float, default=0.0, help='sample near lion with given p')
     args = parser.parse_args()
 
     coords = utils.load_coords()
@@ -168,7 +169,8 @@ def main():
     model = utils.cuda(model)
     criterion = Loss(dice_weight=args.dice_weight, bg_weight=args.bg_weight)
     if args.mode == 'train':
-        kwargs = dict(min_scale=args.min_scale, max_scale=args.max_scale)
+        kwargs = dict(min_scale=args.min_scale, max_scale=args.max_scale,
+                      oversample=args.oversample)
         train_loader, valid_loader = (
             utils.make_loader(
                 SegmentationDataset, args, train_paths, coords, **kwargs),
