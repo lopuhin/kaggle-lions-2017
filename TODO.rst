@@ -18,6 +18,7 @@ Training data:
 UNet training:
 - SGD
 - UNet hyperparameters:
+    - larger patch size
     - filters_base (not much diff?)
     - depth via filter_factors (not much diff?)
     - 4x/8x pool on the last layer (not much diff?)

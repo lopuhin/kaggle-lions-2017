@@ -329,7 +329,8 @@ def train(args, model: nn.Module, criterion, *, train_loader, valid_loader,
                 if i and i % report_each == 0:
                     write_event(log, step, loss=mean_loss)
                     if save_predictions and i % save_prediction_each == 0:
-                        save_predictions(root, i, inputs, targets, outputs)
+                        p_i = (i // save_prediction_each) % 5
+                        save_predictions(root, p_i, inputs, targets, outputs)
             write_event(log, step, loss=mean_loss)
             tq.close()
             save(epoch + 1)
