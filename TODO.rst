@@ -1,5 +1,14 @@
+make_submission:
+- more estimators, tune params - train xgboost with validation!!!
+- tune PATCH_SIZE
+
+Smaller UNet output (4x)
+Try jaccard again with more oversampling
 Try predicting scale
 Try predicting borders - check original UNet paper
+
+More overlap on UNet prediction
+Try slightly different test scale (2.5?)
 
 Prediction scale:
 - train 1.0 -- 2 scale + lr schedule + stratified,

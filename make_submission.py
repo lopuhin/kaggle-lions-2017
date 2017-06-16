@@ -25,15 +25,17 @@ import utils
 
 STEP_RATIO = 2
 PRED_SCALE = 4
-ALL_FEATURE_NAMES = ['x0', 'x1', 'y0', 'y1',
-                     'sum', 'sum-0.04', 'sum-0.08', 'sum-0.25',
-                     'blob-0.04', 'blob-0.04-sum', 'blob-0.08', 'blob-0.08-sum']
-FEATURE_NAMES = ['sum', 'sum-0.04', 'sum-0.08', 'sum-0.25']
-FEATURE_NAMES += ['blob-0.04', 'blob-0.04-sum', 'blob-0.08', 'blob-0.08-sum']
+PATCH_SIZE = 320
+SUM_THRESHOLDS = [0.02, 0.04, 0.08, 0.16, 0.24, 0.32, 0.5]
+BLOB_THRESHOLDS = [0.02, 0.04, 0.08, 0.16, 0.24, 0.5]
+SUM_FEATURES = ['sum'] + ['sum-{:.2}'.format(th) for th in SUM_THRESHOLDS]
+BLOB_FEATURES = [f.format(th) for th in BLOB_THRESHOLDS
+                 for f in ['blob-{:.2f}', 'blob-{:.2f}-sum']]
+FEATURE_NAMES = SUM_FEATURES + BLOB_FEATURES
+ALL_FEATURE_NAMES = ['x0', 'x1', 'y0', 'y1'] + FEATURE_NAMES
 
 
-def load_xs_ys(pred_path: Path, coords: pd.DataFrame,
-               thresholds=(0.04, 0.08, 0.25), patch_size=80,
+def load_xs_ys(pred_path: Path, coords: pd.DataFrame
                ) -> Tuple[int, float, np.ndarray, np.ndarray]:
     pred = utils.load_pred(pred_path)
     path_parts = pred_path.name.split('-')[:-1]
@@ -60,23 +62,23 @@ def load_xs_ys(pred_path: Path, coords: pd.DataFrame,
         cls_blobs = [[(x, y, cls_pred[int(np.round(y)), int(np.round(x))])
                       for y, x, _ in blob_log(cls_pred, threshold=blob_threshold,
                                               min_sigma=1, max_sigma=4, num_sigma=4)]
-                     for blob_threshold in [0.04, 0.08]]
+                     for blob_threshold in BLOB_THRESHOLDS]
         max_y, max_x = cls_pred.shape
-        step = patch_size // STEP_RATIO
-        steps = lambda m: range(-patch_size + step, m + patch_size - step, step)
+        step = PATCH_SIZE // STEP_RATIO
+        steps = lambda m: range(-PATCH_SIZE + step, m + PATCH_SIZE - step, step)
         for x0 in steps(max_x):
             for y0 in steps(max_y):
-                x1 = min(max_x, x0 + patch_size)
-                y1 = min(max_y, y0 + patch_size)
+                x1 = min(max_x, x0 + PATCH_SIZE)
+                y1 = min(max_y, y0 + PATCH_SIZE)
                 x0 = max(0, x0)
                 y0 = max(0, y0)
                 patch = cls_pred[y0: y1, x0: x1]
                 features = [x0, x1, y0, y1, patch.sum()]
                 cls_features.append(features)
-                for i, threshold in enumerate(thresholds):
+                for i, threshold in enumerate(SUM_THRESHOLDS):
                     bin_mask = patch > threshold
-                    if i + 1 < len(thresholds):
-                        bin_mask &= patch < thresholds[i + 1]
+                   #if i + 1 < len(SUM_THRESHOLDS):
+                   #    bin_mask &= patch < SUM_THRESHOLDS[i + 1]
                     features.append(bin_mask.sum())
                 target = sum(x0 <= x < x1 and y0 <= y < y1 for x, y in cls_coords)
                 cls_targets.append(target)
@@ -236,9 +238,9 @@ def main():
         data = load_all_features(args.root, only_valid=True, args=args)
         train(data['ids'], data['xs'], data['ys'],
               ExtraTreesRegressor(
-                  n_estimators=100, max_depth=3, min_samples_split=10, n_jobs=8,
+                  n_estimators=500, max_depth=5, min_samples_split=10, n_jobs=8,
                   criterion='mse'),
-              XGBRegressor(n_estimators=100, max_depth=3, nthread=16),
+              XGBRegressor(n_estimators=500, max_depth=5, nthread=16),
              #Lasso(alpha=1.0, normalize=False, max_iter=100000),
               save_to=model_path,
               concat_features=args.concat_features,
