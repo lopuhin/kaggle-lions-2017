@@ -1,6 +1,7 @@
 make_submission:
 - more estimators, tune params - train xgboost with validation!!!
-- tune PATCH_SIZE
+- tune PATCH_SIZE - try 40?
+- k-fold validation without shuffle, order by scale
 
 Smaller UNet output (4x)
 Try jaccard again with more oversampling
