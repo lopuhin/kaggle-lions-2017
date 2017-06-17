@@ -50,19 +50,24 @@ def predict(model, img_paths: List[Path], out_path: Path, patch_size: int,
             is_test=False, test_scale=1.0, min_scale=1.0, max_scale=1.0):
     model.eval()
 
-    def predict(arg):
-        img_path, img = arg
+    def load_image(path):
         if is_test:
-            img_scale = test_scale
+            scale = test_scale
         elif min_scale != max_scale:
-            img_scale = round(np.random.uniform(min_scale, max_scale), 5)
+            scale = round(np.random.uniform(min_scale, max_scale), 5)
         else:
-            img_scale = min_scale
+            scale = min_scale
+        img = utils.load_image(path, cache=False)
         h, w = img.shape[:2]
-        if img_scale != 1:
-            h = int(h * img_scale)
-            w = int(w * img_scale)
+        if scale != 1:
+            h = int(h * scale)
+            w = int(w * scale)
             img = cv2.resize(img, (w, h))
+        return (path, scale), img
+
+    def predict(arg):
+        img_meta, img = arg
+        h, w = img.shape[:2]
         s = patch_size
         step = s - 32  # // 2
         xs = list(range(0, w - s, step)) + [w - s]
@@ -84,17 +89,16 @@ def predict(model, img_paths: List[Path], out_path: Path, patch_size: int,
                 pred_img[:, y: y + s, x: x + s] += pred
                 pred_count[y: y + s, x: x + s] += 1
         pred_img /= np.maximum(pred_count, 1)
-        return (img_path, img_scale), pred_img
+        return img_meta, pred_img
 
-    predictions = map(
-        predict,
-        utils.imap_fixed_output_buffer(
-            lambda p: (p, utils.load_image(p, cache=False)),
-            tqdm.tqdm(img_paths),
-            threads=2))
+    loaded = utils.imap_fixed_output_buffer(
+        load_image, tqdm.tqdm(img_paths), threads=4)
 
-    for (img_path, img_scale), pred_img in utils.imap_fixed_output_buffer(
-            lambda _: next(predictions), img_paths, threads=1):
+    prediction_results = utils.imap_fixed_output_buffer(
+        predict, loaded, threads=1)
+
+    def save_prediction(arg):
+        (img_path, img_scale), pred_img = arg
         resized = np.stack([utils.downsample(p, PRED_SCALE) for p in pred_img])
         binarized = (resized * 1000).astype(np.uint16)
         with gzip.open(
@@ -102,6 +106,11 @@ def predict(model, img_paths: List[Path], out_path: Path, patch_size: int,
                     img_path.stem, img_scale)),
                 'wb', compresslevel=4) as f:
             np.save(f, binarized)
+        return img_path.stem
+
+    for _ in utils.imap_fixed_output_buffer(
+            save_prediction, prediction_results, threads=4):
+        pass
 
 
 def save_predictions(root: Path, n: int, inputs, targets, outputs):
@@ -201,9 +210,11 @@ def main():
             predict(model, valid_paths, out_path=root, patch_size=args.patch_size,
                     min_scale=args.min_scale, max_scale=args.max_scale)
         elif args.mode == 'predict_test':
-            test_paths = list(utils.DATA_ROOT.joinpath('Test').glob('*.jpg'))
             out_path = root.joinpath('test')
             out_path.mkdir(exist_ok=True)
+            predicted = {p.stem.split('-')[0] for p in out_path.glob('*.npy')}
+            test_paths = [p for p in utils.DATA_ROOT.joinpath('Test').glob('*.jpg')
+                          if p.stem not in predicted]
             predict(model, test_paths, out_path, patch_size=args.patch_size,
                     is_test=True, test_scale=args.test_scale)
         else:
