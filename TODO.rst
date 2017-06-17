@@ -1,5 +1,4 @@
 make_submission:
-- tune PATCH_SIZE - try 40?
 - more estimators, tune params - train xgboost with validation, use that tuned
   model for prediction
 
