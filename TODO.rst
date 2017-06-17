@@ -1,16 +1,16 @@
 make_submission:
-- tune PATCH_SIZE - try 40? Memory!
+- tune PATCH_SIZE - try 40?
 - more estimators, tune params - train xgboost with validation, use that tuned
   model for prediction
 
 Try jaccard again with more oversampling
 
-Try predicting scale
-Try predicting borders - check original UNet paper
-
 More overlap on UNet prediction
 Try slightly different test scale (2.2? 1.8?)
 Try to reduce scale augmentation during training?
+
+Try predicting scale
+Try predicting borders - check original UNet paper
 
 Prediction scale:
 - train 1.0 -- 2 scale + lr schedule + stratified,

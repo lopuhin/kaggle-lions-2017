@@ -25,7 +25,7 @@ import utils
 
 STEP_RATIO = 2
 PRED_SCALE = 4
-PATCH_SIZE = 80
+PATCH_SIZE = 40
 SUM_THRESHOLDS = [0.02, 0.04, 0.08, 0.16, 0.24, 0.32, 0.5]
 BLOB_THRESHOLDS = [0.02, 0.04, 0.08, 0.16, 0.24, 0.5]
 SUM_FEATURES = ['sum'] + ['sum-{:.2}'.format(th) for th in SUM_THRESHOLDS]
@@ -105,7 +105,7 @@ def load_all_features(root: Path, only_valid: bool, args) -> Dict[str, np.ndarra
     if args.limit:
         pred_paths = pred_paths[:args.limit]
     if not args.new_features and features_path.exists():
-        data = np.load(str(features_path))
+        data = dict(np.load(str(features_path)))
         ids = [get_id(p) for p in pred_paths]
         assert set(ids) == set(data['ids'][0])
         return data
@@ -121,7 +121,8 @@ def load_all_features(root: Path, only_valid: bool, args) -> Dict[str, np.ndarra
                 data['scales'][cls].extend([scale] * len(ys[cls]))
                 data['xs'][cls].extend(xs[cls])
                 data['ys'][cls].extend(ys[cls])
-    data = {k: np.array(v) for k, v in data.items()}
+    data = {k: np.array(v, dtype=np.int32 if k in {'ids', 'ys'} else np.float32)
+            for k, v in data.items()}
     with features_path.open('wb') as f:
         np.savez(f, **data)
     return data
