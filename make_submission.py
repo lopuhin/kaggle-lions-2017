@@ -15,7 +15,7 @@ from sklearn.dummy import DummyRegressor
 from sklearn.ensemble import ExtraTreesRegressor
 from sklearn.externals import joblib
 from sklearn.linear_model import Lasso
-from sklearn.model_selection import cross_val_predict, GroupKFold
+from sklearn.model_selection import cross_val_predict, KFold
 from sklearn import metrics
 import tqdm
 from xgboost import XGBRegressor
@@ -135,20 +135,23 @@ def get_pred_by_id(ids: np.ndarray, pred: np.ndarray, unique_ids) -> np.ndarray:
     return np.divide(pred_by_id, STEP_RATIO**2)
 
 
-def train(all_ids, all_xs, all_ys, *regs,
+def train(data, *regs,
           save_to=None, concat_features=False, explain=False):
     coords = utils.load_coords()
-    concated_xs = np.concatenate(all_xs, axis=1)
+    concated_xs = np.concatenate(data['xs'], axis=1)
     all_rmse, all_patch_rmse, all_baselines = [], [], []
     regs_name = ', '.join(type(reg).__name__ for reg in regs)
     fitted_regs = []
     for cls in range(utils.N_CLASSES):
-        ids = all_ids[cls]
-        ys = all_ys[cls]
-        xs = input_features(concated_xs if concat_features else all_xs[cls])
-        cv = GroupKFold(n_splits=5)
+        ids = data['ids'][cls]
+        scales = data['scales'][cls]
+        ys = data['ys'][cls]
+        xs = input_features(concated_xs if concat_features else data['xs'][cls])
+        indices = np.array(sorted(range(len(ids)), key=lambda i: (scales[i], ids[i])))
+        ids, xs, ys = ids[indices], xs[indices], ys[indices]
+        cv = KFold(n_splits=3)
         pred = average_predictions(
-            [cross_val_predict(reg, xs, ys, cv=cv, groups=ids) for reg in regs])
+            [cross_val_predict(reg, xs, ys, cv=cv) for reg in regs])
         ys_by_id, pred_by_id = [], []
         unique_ids = sorted(set(ids))
         pred_by_id = get_pred_by_id(ids, pred, unique_ids)
@@ -238,7 +241,7 @@ def main():
     model_path = args.root.joinpath('regressor.joblib')  # type: Path
     if args.mode == 'train':
         data = load_all_features(args.root, only_valid=True, args=args)
-        train(data['ids'], data['xs'], data['ys'],
+        train(data,
               ExtraTreesRegressor(
                   n_estimators=100, max_depth=3, min_samples_split=10, n_jobs=8,
                   criterion='mse'),
