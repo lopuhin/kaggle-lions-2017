@@ -112,7 +112,7 @@ def load_all_features(root: Path, only_valid: bool, args) -> Dict[str, np.ndarra
     print('{} total'.format(len(pred_paths)))
     data = {k: [[] for _ in range(utils.N_CLASSES)]
             for k in ['ids', 'scales', 'xs', 'ys']}
-    with multiprocessing.pool.Pool(processes=16) as pool:
+    with multiprocessing.pool.Pool(processes=24) as pool:
         for id, scale, xs, ys in tqdm.tqdm(
                 pool.imap(partial(load_xs_ys, coords=coords), pred_paths, chunksize=2),
                 total=len(pred_paths)):

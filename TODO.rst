@@ -2,8 +2,9 @@ make_submission:
 - more estimators, tune params - train xgboost with validation, use that tuned
   model for prediction
 
-Try larger patch size (384 x 384)
 Try to reduce scale augmentation during training? say 0.8 -- 1.25
+Try to sample random lion across all images
+Try larger patch size (384 x 384)
 Try slightly different test scale (0.55?)
 Try to train on 1.5x and predict on 0.75x?
 Try stratified again?
