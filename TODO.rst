@@ -4,7 +4,7 @@ make_submission:
 
 Try to reduce scale augmentation during training? say 0.8 -- 1.25
 Try larger patch size (384 x 384)
-Try more layers in UNet
+Try more conv layers in UNet
 Try to sample random lion across all images
 Try slightly different test scale (0.55?)
 Try to train on 1.5x and predict on 0.75x?
