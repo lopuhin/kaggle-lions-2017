@@ -16,25 +16,33 @@ import torch
 import tqdm
 
 import utils
-from unet_models import UNet, Loss
+from unet_models import UNet, UNetWithHead, Loss
 
 
 class SegmentationDataset(utils.BasePatchDataset):
-    def __init__(self, *args, mark_r: int=8, debug: bool=False, **kwargs):
+    def __init__(self, *args, mark_r: int=8, debug: bool=False,
+                 downscale=False, **kwargs):
         super().__init__(*args, **kwargs)
         self.mark_r = mark_r
+        self.downscale = downscale
         self.debug = debug
 
     def new_x_y(self, patch, points):
         """ Sample (x, y) pair.
         """
-        mask = np.zeros((self.patch_size, self.patch_size), dtype=np.int64)
+        s = self.patch_size
+        m = self.mark_r
+        if self.downscale:
+            s = s // 4
+            m = m // 4
+        mask = np.zeros((s, s), dtype=np.int64)
         mask[:] = utils.N_CLASSES
         nneg = lambda x: max(0, x)
         for cls, (x, y) in points:
-            ix, iy = int(x), int(y)
-            mask[nneg(iy - self.mark_r): nneg(iy + self.mark_r),
-                 nneg(ix - self.mark_r): nneg(ix + self.mark_r)] = cls
+            if self.downscale:
+                x, y = x / 4, y / 4
+            ix, iy = int(round(x)), int(round(y))
+            mask[nneg(iy - m): nneg(iy + m), nneg(ix - m): nneg(ix + m)] = cls
         if random.random() < 0.5:
             patch = np.flip(patch, axis=1).copy()
             mask = np.flip(mask, axis=1).copy()
@@ -160,7 +168,7 @@ def main():
     arg('--n-folds', type=int, default=5)
     arg('--stratified', action='store_true')
     arg('--mode', choices=[
-        'train', 'validation', 'predict_valid', 'predict_test', 'predict_all_valid'],
+        'train', 'predict_valid', 'predict_test', 'predict_all_valid'],
         default='train')
     arg('--clean', action='store_true')
     arg('--epoch-size', type=int)
@@ -169,17 +177,21 @@ def main():
     arg('--max-scale', type=float, default=1)
     arg('--test-scale', type=float, default=0.5)
     arg('--oversample', type=float, default=0.0, help='sample near lion with given p')
+    arg('--with-head', action='store_true')
     args = parser.parse_args()
 
     coords = utils.load_coords()
     train_paths, valid_paths = utils.train_valid_split(args, coords)
     root = Path(args.root)
-    model = UNet()
+    model = UNetWithHead() if args.with_head else UNet()
     model = utils.cuda(model)
     criterion = Loss(dice_weight=args.dice_weight, bg_weight=args.bg_weight)
     if args.mode == 'train':
-        kwargs = dict(min_scale=args.min_scale, max_scale=args.max_scale,
-                      oversample=args.oversample)
+        kwargs = dict(
+            min_scale=args.min_scale, max_scale=args.max_scale,
+            oversample=args.oversample,
+            downscale=args.with_head,
+        )
         train_loader, valid_loader = (
             utils.make_loader(
                 SegmentationDataset, args, train_paths, coords, **kwargs),
@@ -196,11 +208,7 @@ def main():
                     save_predictions=save_predictions)
     else:
         utils.load_best_model(model, root)
-        if args.mode == 'validation':
-            valid_loader = utils.make_loader(
-                SegmentationDataset, args, valid_paths, coords, deterministic=True)
-            utils.validation(model, criterion, valid_loader)
-        elif args.mode == 'predict_valid':
+        if args.mode == 'predict_valid':
             predict(model, valid_paths, out_path=root, patch_size=args.patch_size,
                     min_scale=args.min_scale, max_scale=args.max_scale)
         elif args.mode == 'predict_all_valid':

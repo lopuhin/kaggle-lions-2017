@@ -3,18 +3,21 @@ make_submission:
   model for prediction
 
 Try to reduce scale augmentation during training? say 0.8 -- 1.25
-Try to sample random lion across all images
 Try larger patch size (384 x 384)
+Try more layers in UNet
+Try to sample random lion across all images
 Try slightly different test scale (0.55?)
 Try to train on 1.5x and predict on 0.75x?
 Try stratified again?
 
 Last submission:
 More overlap on UNet prediction
+Try to average several models
 
 Crazy:
 Try predicting scale
 Try predicting borders - check original UNet paper
+Add some vgg-like or resnet head, and make predictions 4x smaller
 
 Try jaccard again with more oversampling (looks worse)
 

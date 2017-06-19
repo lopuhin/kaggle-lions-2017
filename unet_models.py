@@ -42,14 +42,16 @@ class UNetModule(nn.Module):
 
 class UNet(nn.Module):
     module = UNetModule
-    filter_factors = [1, 2, 4, 8, 16]
 
-    def __init__(self, filters_base: int=32):
+    def __init__(self,
+                 input_channels: int=3,
+                 filters_base: int=32,
+                 filter_factors=(1, 2, 4, 8, 16)):
         super().__init__()
-        filter_sizes = [filters_base * s for s in self.filter_factors]
+        filter_sizes = [filters_base * s for s in filter_factors]
         self.down, self.up = [], []
         for i, nf in enumerate(filter_sizes):
-            low_nf = 3 if i == 0 else filter_sizes[i - 1]
+            low_nf = input_channels if i == 0 else filter_sizes[i - 1]
             self.down.append(self.module(low_nf, nf))
             setattr(self, 'down_{}'.format(i), self.down[-1])
             if i != 0:
@@ -81,6 +83,33 @@ class UNet(nn.Module):
 
         x_out = self.conv_final(x_out)
         return F.log_softmax(x_out)
+
+
+class UNetWithHead(nn.Module):
+    filters_base = 32
+    unet_filters_base = 128
+    unet_filter_factors = [1, 2, 4]
+
+    def __init__(self):
+        super().__init__()
+        b = self.filters_base
+        self.head = nn.Sequential(
+            Conv3BN(3, b),
+            Conv3BN(b, b),
+            nn.MaxPool2d(2, 2),
+            Conv3BN(b, b * 2),
+            Conv3BN(b * 2, b * 2),
+            nn.MaxPool2d(2, 2),
+        )
+        self.unet = UNet(
+            input_channels=64,
+            filters_base=self.unet_filters_base,
+            filter_factors=self.unet_filter_factors,
+        )
+
+    def forward(self, x):
+        x = self.head(x)
+        return self.unet(x)
 
 
 class Loss:
