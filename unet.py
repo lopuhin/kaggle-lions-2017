@@ -55,7 +55,8 @@ class SegmentationDataset(utils.BasePatchDataset):
 
 
 def predict(model, img_paths: List[Path], out_path: Path, patch_size: int,
-            is_test=False, test_scale=1.0, min_scale=1.0, max_scale=1.0):
+            is_test=False, test_scale=1.0, min_scale=1.0, max_scale=1.0,
+            downsampled=False):
     model.eval()
 
     def load_image(path):
@@ -107,8 +108,9 @@ def predict(model, img_paths: List[Path], out_path: Path, patch_size: int,
 
     def save_prediction(arg):
         (img_path, img_scale), pred_img = arg
-        resized = np.stack([utils.downsample(p, PRED_SCALE) for p in pred_img])
-        binarized = (resized * 1000).astype(np.uint16)
+        if not downsampled:
+            pred_img = np.stack([utils.downsample(p, PRED_SCALE) for p in pred_img])
+        binarized = (pred_img * 1000).astype(np.uint16)
         with gzip.open(
                 str(out_path / '{}-{:.5f}-pred.npy'.format(
                     img_path.stem, img_scale)),
@@ -208,15 +210,14 @@ def main():
                     save_predictions=save_predictions)
     else:
         utils.load_best_model(model, root)
-        if args.mode == 'predict_valid':
+        if args.mode in {'predict_valid', 'predict_all_valid'}:
+            if args.mode == 'predict_all_valid':
+                # include all paths we did not train on (makes sense only with --limit)
+                valid_paths = list(
+                    set(valid_paths) | (set(utils.labeled_paths()) - set(train_paths)))
             predict(model, valid_paths, out_path=root, patch_size=args.patch_size,
-                    min_scale=args.min_scale, max_scale=args.max_scale)
-        elif args.mode == 'predict_all_valid':
-            # include all paths we did not train on (makes sense only with --limit)
-            valid_paths = list(
-                set(valid_paths) | (set(utils.labeled_paths()) - set(train_paths)))
-            predict(model, valid_paths, out_path=root, patch_size=args.patch_size,
-                    min_scale=args.min_scale, max_scale=args.max_scale)
+                    min_scale=args.min_scale, max_scale=args.max_scale,
+                    downsampled=args.with_head)
         elif args.mode == 'predict_test':
             out_path = root.joinpath('test')
             out_path.mkdir(exist_ok=True)
@@ -224,7 +225,8 @@ def main():
             test_paths = [p for p in utils.DATA_ROOT.joinpath('Test').glob('*.jpg')
                           if p.stem not in predicted]
             predict(model, test_paths, out_path, patch_size=args.patch_size,
-                    is_test=True, test_scale=args.test_scale)
+                    is_test=True, test_scale=args.test_scale,
+                    downsampled=args.with_head)
         else:
             parser.error('Unexpected mode {}'.format(args.mode))
 
