@@ -219,7 +219,14 @@ class BasePatchDataset(BaseDataset):
         raise NotImplementedError
 
     def get_patch_points(self):
-        img_id = random.choice(self.img_ids)
+        oversample = self.oversample and random.random() < self.oversample
+        if oversample:
+            item = None
+            while item is None or item.name not in self.imgs:
+                item = self.coords.iloc[random.randint(0, len(self.coords) - 1)]
+            img_id = item.name
+        else:
+            img_id = random.choice(self.img_ids)
         img = self.imgs[img_id]
         max_y, max_x = img.shape[:2]
         s = self.patch_size
@@ -231,18 +238,15 @@ class BasePatchDataset(BaseDataset):
             scale = 1
         coords = self.coords_by_img_id[img_id]
         b = int(np.ceil(np.sqrt(2) * s / 2))
-        sampled = False
-        if self.oversample and len(coords) > 0 and random.random() < self.oversample:
+        if oversample:
             item = coords.iloc[random.randint(0, len(coords) - 1)]
             x0, y0 = item.col, item.row
             try:
                 x = random.randint(max(x0 - s, b), min(x0 + s, max_x - (b + s)))
                 y = random.randint(max(y0 - s, b), min(y0 + s, max_y - (b + s)))
             except ValueError:
-                pass  # this can happen with large x0 or y0
-            else:
-                sampled = True
-        if not sampled:
+                oversample = False  # this can happen with large x0 or y0
+        if not oversample:
             x = random.randint(b, max_x - (b + s))
             y = random.randint(b, max_y - (b + s))
         patch = img[y - b: y + b + s, x - b: x + b + s]
