@@ -15,7 +15,7 @@ from sklearn.dummy import DummyRegressor
 from sklearn.ensemble import ExtraTreesRegressor
 from sklearn.externals import joblib
 from sklearn.linear_model import Lasso
-from sklearn.model_selection import cross_val_predict, KFold
+from sklearn.model_selection import cross_val_predict, GroupKFold
 from sklearn import metrics
 import tqdm
 from xgboost import XGBRegressor
@@ -150,9 +150,9 @@ def train(data, *regs,
         scales = data['scales'][cls]
         ys = data['ys'][cls]
         xs = input_features(concated_xs if concat_features else data['xs'][cls])
-        indices = np.array(sorted(range(len(ids)), key=lambda i: (scales[i], ids[i])))
-        ids, xs, ys = ids[indices], xs[indices], ys[indices]
-        pred, fitted = train_predict(regs, xs, ys)
+        # indices = np.array(sorted(range(len(ids)), key=lambda i: (scales[i], ids[i])))
+        # ids, xs, ys = ids[indices], xs[indices], ys[indices]
+        pred, fitted = train_predict(regs, xs, ys, ids)
         ys_by_id, pred_by_id = [], []
         unique_ids = sorted(set(ids))
         pred_by_id = get_pred_by_id(ids, pred, unique_ids)
@@ -191,12 +191,12 @@ def train(data, *regs,
         print('Saved to', save_to)
 
 
-def train_predict(regs, xs, ys):
-    cv = KFold(n_splits=4)
+def train_predict(regs, xs, ys, ids):
+    cv = GroupKFold(n_splits=4)
     fitted = []
     cv_preds = []
-    ids = []
-    for train_ids, valid_ids in cv.split(xs):
+    pred_ids = []
+    for train_ids, valid_ids in cv.split(xs, groups=ids):
         reg_preds = []
         for reg in regs:
             reg = clone(reg)
@@ -211,9 +211,11 @@ def train_predict(regs, xs, ys):
             fitted.append(reg)
             reg_preds.append(reg.predict(xs[valid_ids]))
         cv_preds.append(average_predictions(reg_preds))
-        ids.append(valid_ids)
-    ids = np.concatenate(ids)
-    return np.concatenate(cv_preds)[ids], fitted
+        pred_ids.append(valid_ids)
+    pred_ids = np.array([
+        idx for idx, v in sorted(enumerate(np.concatenate(pred_ids)),
+                                 key=lambda x: x[1])])
+    return np.concatenate(cv_preds)[pred_ids], fitted
 
 
 def average_predictions(preds: List[np.ndarray]) -> np.ndarray:
