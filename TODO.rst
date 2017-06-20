@@ -1,8 +1,8 @@
 make_submission:
-- more estimators, tune params - train xgboost with validation, use that tuned
-  model for prediction
+- reproduce the best score again: are new sum features the problem?
 
-Try to reduce scale augmentation during training? say 0.8 -- 1.25
+
+Try to reduce scale augmentation during training? say 0.8 -- 1.25 - bad
 Try larger patch size (384 x 384)
 Try more conv layers in UNet
 Try to sample random lion across all images
