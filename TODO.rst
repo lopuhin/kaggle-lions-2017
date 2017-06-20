@@ -9,6 +9,7 @@ Try to sample random lion across all images
 Try slightly different test scale (0.55?)
 Try to train on 1.5x and predict on 0.75x?
 Try stratified again?
+Larger markers for cls 0 an 1 (12 and 10?)
 
 Last submission:
 More overlap on UNet prediction

@@ -105,7 +105,9 @@ def load_all_features(root: Path, only_valid: bool, args) -> Dict[str, np.ndarra
     if args.limit:
         pred_paths = pred_paths[:args.limit]
     if not args.new_features and features_path.exists():
+        print('Loading features...')
         data = dict(np.load(str(features_path)))
+        print('done.')
         ids = [get_id(p) for p in pred_paths]
         assert set(ids) == set(data['ids'][0])
         return data
@@ -150,9 +152,7 @@ def train(data, *regs,
         xs = input_features(concated_xs if concat_features else data['xs'][cls])
         indices = np.array(sorted(range(len(ids)), key=lambda i: (scales[i], ids[i])))
         ids, xs, ys = ids[indices], xs[indices], ys[indices]
-        cv = KFold(n_splits=3)
-        pred = average_predictions(
-            [cross_val_predict(reg, xs, ys, cv=cv) for reg in regs])
+        pred, fitted = train_predict(regs, xs, ys)
         ys_by_id, pred_by_id = [], []
         unique_ids = sorted(set(ids))
         pred_by_id = get_pred_by_id(ids, pred, unique_ids)
@@ -175,16 +175,12 @@ def train(data, *regs,
         all_patch_rmse.append(patch_rmse)
         all_baselines.append(baseline_rmse)
         if save_to:
-            fitted = []
-            for reg in regs:
-                reg = clone(reg)
-                reg.fit(xs, ys)
-                fitted.append(reg)
-                if explain:
-                    print(type(reg).__name__, format_as_text(
-                        eli5.explain_weights(reg, feature_names=FEATURE_NAMES),
-                        show=('method', 'targets', 'feature_importances')))
             fitted_regs.append(fitted)
+        if explain:
+            for reg in fitted:
+                print(type(reg).__name__, format_as_text(
+                    eli5.explain_weights(reg, feature_names=FEATURE_NAMES),
+                    show=('method', 'targets', 'feature_importances')))
     print('{} with {} features: mean patch RMSE {:.3f}, mean image RMSE {:.2f}, '
           'mean baseline RMSE {:.2f}'
           .format(regs_name, ', '.join(FEATURE_NAMES),
@@ -193,6 +189,31 @@ def train(data, *regs,
     if save_to:
         joblib.dump(fitted_regs, save_to)
         print('Saved to', save_to)
+
+
+def train_predict(regs, xs, ys):
+    cv = KFold(n_splits=4)
+    fitted = []
+    cv_preds = []
+    ids = []
+    for train_ids, valid_ids in cv.split(xs):
+        reg_preds = []
+        for reg in regs:
+            reg = clone(reg)
+            if isinstance(reg, XGBRegressor):
+                reg.fit(xs[train_ids], ys[train_ids],
+                        eval_metric='rmse',
+                        eval_set=[(xs[valid_ids], ys[valid_ids])],
+                        verbose=False,
+                        early_stopping_rounds=3)
+            else:
+                reg.fit(xs[train_ids], ys[train_ids])
+            fitted.append(reg)
+            reg_preds.append(reg.predict(xs[valid_ids]))
+        cv_preds.append(average_predictions(reg_preds))
+        ids.append(valid_ids)
+    ids = np.concatenate(ids)
+    return np.concatenate(cv_preds)[ids], fitted
 
 
 def average_predictions(preds: List[np.ndarray]) -> np.ndarray:
@@ -212,15 +233,16 @@ def input_features(xs):
 
 def predict(root: Path, model_path: Path, all_ids, all_xs, concat_features=False):
     all_regs = joblib.load(model_path)
-    concated_xs = np.concatenate(all_xs, axis=1)
+    if concat_features:
+        concated_xs = np.concatenate(all_xs, axis=1)
     classes = [
         'adult_males', 'subadult_males', 'adult_females', 'juveniles', 'pups']
     unique_ids = sorted(set(all_ids[0]))
     all_preds = pd.DataFrame(index=unique_ids, columns=classes)
-    for cls, (cls_name, cls_regs) in enumerate(zip(classes, all_regs)):
+    for cls, (cls_name, cls_regs) in tqdm.tqdm(list(enumerate(zip(classes, all_regs)))):
         ids = all_ids[cls]
         xs = input_features(concated_xs if concat_features else all_xs[cls])
-        pred = average_predictions([reg.predict(xs) for reg in cls_regs])
+        pred = average_predictions([reg.predict(xs) for reg in tqdm.tqdm(cls_regs)])
         all_preds[cls_name] = round_prediction(get_pred_by_id(ids, pred, unique_ids))
     out_path = root.joinpath(root.name + '.csv')
     all_preds.to_csv(str(out_path), index_label='test_id')
