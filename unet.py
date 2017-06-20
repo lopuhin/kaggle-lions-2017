@@ -54,9 +54,11 @@ class SegmentationDataset(utils.BasePatchDataset):
         return self.transform(patch), torch.from_numpy(mask)
 
 
-def predict(model, img_paths: List[Path], out_path: Path, patch_size: int,
-            is_test=False, test_scale=1.0, min_scale=1.0, max_scale=1.0,
-            downsampled=False):
+def predict(model, img_paths: List[Path], out_path: Path,
+            patch_size: int, batch_size: int,
+            is_test=False, downsampled=False,
+            test_scale=1.0, min_scale=1.0, max_scale=1.0,
+            ):
     model.eval()
 
     def load_image(path):
@@ -90,7 +92,7 @@ def predict(model, img_paths: List[Path], out_path: Path, patch_size: int,
                 utils.img_transform(img[y: y + s, x: x + s]) for x, y in xy_batch_]))
 
         for xy_batch, inputs in utils.imap_fixed_output_buffer(
-                make_batch, tqdm.tqdm(list(utils.batches(all_xy, 64))),
+                make_batch, tqdm.tqdm(list(utils.batches(all_xy, batch_size))),
                 threads=1):
             outputs = model(utils.variable(inputs, volatile=True))
             outputs_data = np.exp(outputs.data.cpu().numpy())
@@ -215,7 +217,8 @@ def main():
                 # include all paths we did not train on (makes sense only with --limit)
                 valid_paths = list(
                     set(valid_paths) | (set(utils.labeled_paths()) - set(train_paths)))
-            predict(model, valid_paths, out_path=root, patch_size=args.patch_size,
+            predict(model, valid_paths, out_path=root,
+                    patch_size=args.patch_size, batch_size=args.batch_size,
                     min_scale=args.min_scale, max_scale=args.max_scale,
                     downsampled=args.with_head)
         elif args.mode == 'predict_test':
@@ -224,9 +227,10 @@ def main():
             predicted = {p.stem.split('-')[0] for p in out_path.glob('*.npy')}
             test_paths = [p for p in utils.DATA_ROOT.joinpath('Test').glob('*.jpg')
                           if p.stem not in predicted]
-            predict(model, test_paths, out_path, patch_size=args.patch_size,
-                    is_test=True, test_scale=args.test_scale,
-                    downsampled=args.with_head)
+            predict(model, test_paths, out_path,
+                    patch_size=args.patch_size, batch_size=args.batch_size,
+                    test_scale=args.test_scale,
+                    is_test=True, downsampled=args.with_head)
         else:
             parser.error('Unexpected mode {}'.format(args.mode))
 
