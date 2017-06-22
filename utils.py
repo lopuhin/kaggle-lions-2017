@@ -259,11 +259,12 @@ class BasePatchDataset(BaseDataset):
             patch = cv2.resize(patch, (self.patch_size, self.patch_size))
         assert patch.shape == (self.patch_size, self.patch_size, 3), patch.shape
         points = []
-        for cls, col, row in zip(coords.cls, coords.col, coords.row):
-            ix, iy = col - x, row - y
-            if (-b <= ix <= b + s) and (-b <= iy <= b + s):
-                p = rotate(Point(ix, iy), -angle, origin=(s // 2, s // 2))
-                points.append((cls, (p.x * scale, p.y * scale)))
+        if len(coords) > 0:
+            for cls, col, row in zip(coords.cls, coords.col, coords.row):
+                ix, iy = col - x, row - y
+                if (-b <= ix <= b + s) and (-b <= iy <= b + s):
+                    p = rotate(Point(ix, iy), -angle, origin=(s // 2, s // 2))
+                    points.append((cls, (p.x * scale, p.y * scale)))
         return patch, points
 
     def __len__(self):
