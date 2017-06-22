@@ -65,7 +65,8 @@ def predict(model, img_paths: List[Path], out_path: Path,
         if is_test:
             scale = test_scale
         elif min_scale != max_scale:
-            scale = round(np.random.uniform(min_scale, max_scale), 5)
+            random.seed(path.stem)
+            scale = round(random.uniform(min_scale, max_scale), 5)
         else:
             scale = min_scale
         img = utils.load_image(path, cache=False)
@@ -80,7 +81,8 @@ def predict(model, img_paths: List[Path], out_path: Path,
         img_meta, img = arg
         h, w = img.shape[:2]
         s = patch_size
-        step = s - 64  # // 2
+        # step = s // 2 - 32
+        step = s - 64
         xs = list(range(0, w - s, step)) + [w - s]
         ys = list(range(0, h - s, step)) + [h - s]
         all_xy = [(x, y) for x in xs for y in ys]
@@ -172,7 +174,7 @@ def main():
     arg('--n-folds', type=int, default=5)
     arg('--stratified', action='store_true')
     arg('--mode', choices=[
-        'train', 'predict_valid', 'predict_test', 'predict_all_valid'],
+        'train', 'valid', 'predict_valid', 'predict_test', 'predict_all_valid'],
         default='train')
     arg('--clean', action='store_true')
     arg('--epoch-size', type=int)
@@ -190,18 +192,18 @@ def main():
     model = UNetWithHead() if args.with_head else UNet()
     model = utils.cuda(model)
     criterion = Loss(dice_weight=args.dice_weight, bg_weight=args.bg_weight)
+    loader_kwargs = dict(
+        min_scale=args.min_scale, max_scale=args.max_scale,
+        downscale=args.with_head,
+    )
     if args.mode == 'train':
-        kwargs = dict(
-            min_scale=args.min_scale, max_scale=args.max_scale,
-            oversample=args.oversample,
-            downscale=args.with_head,
-        )
         train_loader, valid_loader = (
             utils.make_loader(
-                SegmentationDataset, args, train_paths, coords, **kwargs),
+                SegmentationDataset, args, train_paths, coords,
+                oversample=args.oversample, **loader_kwargs),
             utils.make_loader(
                 SegmentationDataset, args, valid_paths, coords,
-                deterministic=True, **kwargs))
+                deterministic=True, **loader_kwargs))
         if root.exists() and args.clean:
             shutil.rmtree(str(root))
         root.mkdir(exist_ok=True)
@@ -210,6 +212,13 @@ def main():
         utils.train(args, model, criterion,
                     train_loader=train_loader, valid_loader=valid_loader,
                     save_predictions=save_predictions)
+    elif args.mode == 'valid':
+        utils.load_best_model(model, root)
+        valid_loader = utils.make_loader(
+            SegmentationDataset, args, valid_paths, coords,
+            deterministic=True, **loader_kwargs)
+        utils.validation(model, criterion,
+                         tqdm.tqdm(valid_loader, desc='Validation'))
     else:
         utils.load_best_model(model, root)
         if args.mode in {'predict_valid', 'predict_all_valid'}:

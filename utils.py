@@ -388,7 +388,7 @@ def validation(model: nn.Module, criterion, valid_loader) -> Dict[str, float]:
         loss = criterion(outputs, targets)
         losses.append(loss.data[0])
     valid_loss = np.mean(losses)  # type: float
-    print('Valid loss: {:.3f}'.format(valid_loss))
+    print('Valid loss: {:.5f}'.format(valid_loss))
     return {'valid_loss': valid_loss}
 
 
