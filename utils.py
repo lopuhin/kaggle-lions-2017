@@ -27,7 +27,7 @@ import statprof
 import torch
 from torch import nn
 from torch.autograd import Variable
-from torch.optim import Adam
+from torch.optim import Adam, SGD
 from torch.utils.data import Dataset, DataLoader
 from torchvision.transforms import ToTensor, Normalize, Compose
 import tqdm
@@ -276,7 +276,8 @@ class BasePatchDataset(BaseDataset):
 def train(args, model: nn.Module, criterion, *, train_loader, valid_loader,
           save_predictions=None):
     lr = args.lr
-    make_optimizer = lambda: Adam(model.parameters(), lr=lr)
+    make_optimizer = lambda: SGD(model.parameters(), lr=lr,
+                                 nesterov=True, momentum=0.9)
     optimizer = make_optimizer()
 
     root = Path(args.root)
@@ -384,13 +385,19 @@ CLS_NAMES = ['male', 'sub_male', 'female', 'juv', 'pup']
 def validation(model: nn.Module, criterion, valid_loader) -> Dict[str, float]:
     model.eval()
     losses = []
+    all_outputs, all_targets = [], []
     for inputs, targets in valid_loader:
         inputs, targets = variable(inputs, volatile=True), variable(targets)
         outputs = model(inputs)
         loss = criterion(outputs, targets)
         losses.append(loss.data[0])
+        all_targets.extend(targets.data.cpu().numpy())
+        all_outputs.extend(outputs.data.cpu().numpy().argmax(axis=1))
     valid_loss = np.mean(losses)  # type: float
     print('Valid loss: {:.5f}'.format(valid_loss))
+    from sklearn.metrics import classification_report, accuracy_score
+    print('Accuracy: {:.3f}'.format(accuracy_score(all_targets, all_outputs)))
+    print(classification_report(all_targets, all_outputs))
     return {'valid_loss': valid_loss}
 
 
