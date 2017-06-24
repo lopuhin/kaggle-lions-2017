@@ -176,6 +176,7 @@ def main():
     arg('--mode', choices=[
         'train', 'valid', 'predict_valid', 'predict_test', 'predict_all_valid'],
         default='train')
+    arg('--valid-model', help='path to model file to use for validation')
     arg('--clean', action='store_true')
     arg('--epoch-size', type=int)
     arg('--limit', type=int, help='Use only N images for train/valid')
@@ -213,7 +214,11 @@ def main():
                     train_loader=train_loader, valid_loader=valid_loader,
                     save_predictions=save_predictions)
     elif args.mode == 'valid':
-        utils.load_best_model(model, root)
+        if args.valid_model:
+            model.load_state_dict(torch.load(args.valid_model)['model'])
+            print('Loaded model {}'.format(args.valid_model))
+        else:
+            utils.load_best_model(model, root)
         valid_loader = utils.make_loader(
             SegmentationDataset, args, valid_paths, coords,
             deterministic=True, **loader_kwargs)
