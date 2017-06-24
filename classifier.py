@@ -236,7 +236,9 @@ def main():
             save_predictions=save_predictions,
             is_classification=True,
             make_optimizer=lambda lr: SGD(
-                model.parameters(), lr=lr, nesterov=True, momentum=0.9),
+                [{'params': model.features.parameters(), 'lr': lr},
+                 {'params': model.classifier.parameters(), 'lr': lr},
+                 ], nesterov=True, momentum=0.9),
         )
     elif args.mode == 'valid':
         utils.load_best_model(model, root, args.model_path)
