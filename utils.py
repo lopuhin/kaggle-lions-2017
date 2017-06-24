@@ -275,9 +275,10 @@ class BasePatchDataset(BaseDataset):
 
 
 def train(args, model: nn.Module, criterion, *, train_loader, valid_loader,
-          optimizer_cls=Adam, save_predictions=None, is_classification=False):
+          make_optimizer=None, save_predictions=None, is_classification=False):
     lr = args.lr
-    optimizer = optimizer_cls(model.parameters(), lr=lr)
+    make_optimizer = make_optimizer or (lambda lr: Adam(model.parameters(), lr=lr))
+    optimizer = make_optimizer(lr)
 
     root = Path(args.root)
     model_path = root / 'model.pt'
@@ -350,7 +351,7 @@ def train(args, model: nn.Module, criterion, *, train_loader, valid_loader,
             elif len(valid_losses) > 2 and min(valid_losses[-2:]) > best_valid_loss:
                 # two epochs without improvement
                 lr /= 5
-                optimizer = optimizer(model.parameters(), lr=lr)
+                optimizer = make_optimizer(lr)
         except KeyboardInterrupt:
             tq.close()
             print('Ctrl+C, saving snapshot')

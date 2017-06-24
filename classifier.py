@@ -184,7 +184,8 @@ def main():
             train_loader=train_loader, valid_loader=valid_loader,
             save_predictions=save_predictions,
             is_classification=True,
-            optimizer_cls=partial(SGD, nesterov=True, momentum=0.9),
+            make_optimizer=lambda lr: SGD(
+                model.parameters(), lr=lr, nesterov=True, momentum=0.9),
         )
     elif args.mode == 'valid':
         utils.load_best_model(model, root, args.model_path)
