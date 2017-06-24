@@ -12,6 +12,7 @@ import pandas as pd
 import numpy as np
 from matplotlib import pyplot as plt
 import skimage.exposure
+import torch
 from torch import nn
 from torchvision import models
 from torch.optim import SGD
@@ -133,6 +134,56 @@ def save_predictions(root: Path, n: int, inputs, targets, outputs):
         plt.close()
 
 
+def predict(model, img_paths: List[Path], out_path: Path,
+            patch_size: int, batch_size: int,
+            is_test=False, test_scale=1.0, min_scale=1.0, max_scale=1.0,
+            ):
+    model.eval()
+
+    def load_image(path):
+        if is_test:
+            scale = test_scale
+        elif min_scale != max_scale:
+            random.seed(path.stem)
+            scale = round(random.uniform(min_scale, max_scale), 5)
+        else:
+            scale = min_scale
+        img = utils.load_image(path, cache=False)
+        h, w = img.shape[:2]
+        if scale != 1:
+            h = int(h * scale)
+            w = int(w * scale)
+            img = cv2.resize(img, (w, h))
+        return (path, scale), img
+
+    def predict(arg):
+        img_meta, img = arg
+        h, w = img.shape[:2]
+        s = patch_size
+        # TODO - get all_xy from blobs
+        assert False
+        all_xy = [(x, y) for x in xs for y in ys]
+
+        def make_batch(xy_batch_):
+            return (xy_batch_, torch.stack([
+                utils.img_transform(img[y: y + s, x: x + s]) for x, y in xy_batch_]))
+
+        for xy_batch, inputs in utils.imap_fixed_output_buffer(
+                make_batch, tqdm.tqdm(list(utils.batches(all_xy, batch_size))),
+                threads=1):
+            outputs = model(utils.variable(inputs, volatile=True))
+            # TODO - apply softmax
+            outputs_data = np.exp(outputs.data.cpu().numpy())
+            # TODO - collect predictions
+        return img_meta, pred_img
+
+    loaded = utils.imap_fixed_output_buffer(
+        load_image, tqdm.tqdm(img_paths), threads=4)
+
+    for x in utils.imap_fixed_output_buffer(predict, loaded, threads=1):
+        assert False  # TODO
+
+
 def main():
     parser = argparse.ArgumentParser()
     arg = parser.add_argument
@@ -204,8 +255,7 @@ def main():
                     set(valid_paths) | (set(utils.labeled_paths()) - set(train_paths)))
             predict(model, valid_paths, out_path=root,
                     patch_size=args.patch_size, batch_size=args.batch_size,
-                    min_scale=args.min_scale, max_scale=args.max_scale,
-                    downsampled=args.with_head)
+                    min_scale=args.min_scale, max_scale=args.max_scale)
         elif args.mode == 'predict_test':
             out_path = root.joinpath('test')
             out_path.mkdir(exist_ok=True)
@@ -218,8 +268,7 @@ def main():
                               if int(p.stem) % 2 == args.pred_oddity]
             predict(model, test_paths, out_path,
                     patch_size=args.patch_size, batch_size=args.batch_size,
-                    test_scale=args.test_scale,
-                    is_test=True, downsampled=args.with_head)
+                    test_scale=args.test_scale, is_test=True)
         else:
             parser.error('Unexpected mode {}'.format(args.mode))
 
