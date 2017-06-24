@@ -3,12 +3,16 @@ TODO:
 ws:
 - predict 192 patch (now)
 - continue training AWS model, turn off AWS
+$ ./unet.py runs/unet-stratified-scale-0.8-1.6-oversample0.2-fold2 --stratified --fold 2 --min-scale 0.8 --max-scale 1.6 --oversample 0.2 --workers 0
 - more hyperparameter tuning
 - train & predict another fold with current best settings
 
 1080:
 - predict 192 patch (now)
 - predict test on 0.55?
+
+AWS:
+- remove volumes and AMI
 
 
 Try 192 patch
