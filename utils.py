@@ -378,6 +378,7 @@ CLS_COLORS = [
     [0., 0., 1.],  # blue: juveniles
     [0., 1., 0.],  # green: pups
 ]
+CLS_NAMES = ['male', 'sub_male', 'female', 'juv', 'pup']
 
 
 def validation(model: nn.Module, criterion, valid_loader) -> Dict[str, float]:
