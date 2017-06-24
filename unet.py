@@ -2,6 +2,7 @@
 import argparse
 import gzip
 import json
+from functools import partial
 from pathlib import Path
 import random
 import shutil
@@ -13,6 +14,7 @@ import cv2
 import numpy as np
 import skimage.exposure
 import torch
+from torch.optim import SGD
 import tqdm
 
 import utils
@@ -213,16 +215,21 @@ def main():
         root.mkdir(exist_ok=True)
         root.joinpath('params.json').write_text(
             json.dumps(vars(args), indent=True, sort_keys=True))
-        utils.train(args, model, criterion,
-                    train_loader=train_loader, valid_loader=valid_loader,
-                    save_predictions=save_predictions)
+        utils.train(
+            args, model, criterion,
+            train_loader=train_loader, valid_loader=valid_loader,
+            save_predictions=save_predictions,
+            is_classification=True,
+            optimizer_cls=partial(SGD, nesterov=True, momentum=0.9),
+        )
     elif args.mode == 'valid':
         utils.load_best_model(model, root, args.model_path)
         valid_loader = utils.make_loader(
             SegmentationDataset, args, valid_paths, coords,
             deterministic=True, **loader_kwargs)
         utils.validation(model, criterion,
-                         tqdm.tqdm(valid_loader, desc='Validation'))
+                         tqdm.tqdm(valid_loader, desc='Validation'),
+                         is_classification=True)
     else:
         utils.load_best_model(model, root, args.model_path)
         if args.mode in {'predict_valid', 'predict_all_valid'}:

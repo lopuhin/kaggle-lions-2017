@@ -22,12 +22,13 @@ from shapely.geometry import Point
 from shapely.affinity import rotate
 import skimage.io
 import skimage.exposure
+from sklearn.metrics import classification_report, accuracy_score
 from sklearn.model_selection import KFold
 import statprof
 import torch
 from torch import nn
 from torch.autograd import Variable
-from torch.optim import Adam, SGD
+from torch.optim import Adam
 from torch.utils.data import Dataset, DataLoader
 from torchvision.transforms import ToTensor, Normalize, Compose
 import tqdm
@@ -274,11 +275,9 @@ class BasePatchDataset(BaseDataset):
 
 
 def train(args, model: nn.Module, criterion, *, train_loader, valid_loader,
-          save_predictions=None):
+          optimizer_cls=Adam, save_predictions=None, is_classification=False):
     lr = args.lr
-    make_optimizer = lambda: SGD(model.parameters(), lr=lr,
-                                 nesterov=True, momentum=0.9)
-    optimizer = make_optimizer()
+    optimizer = optimizer_cls(model.parameters(), lr=lr)
 
     root = Path(args.root)
     model_path = root / 'model.pt'
@@ -340,7 +339,8 @@ def train(args, model: nn.Module, criterion, *, train_loader, valid_loader,
             write_event(log, step, loss=mean_loss)
             tq.close()
             save(epoch + 1)
-            valid_metrics = validation(model, criterion, valid_loader)
+            valid_metrics = validation(model, criterion, valid_loader,
+                                       is_classification=is_classification)
             write_event(log, step, **valid_metrics)
             valid_loss = valid_metrics['valid_loss']
             valid_losses.append(valid_loss)
@@ -350,7 +350,7 @@ def train(args, model: nn.Module, criterion, *, train_loader, valid_loader,
             elif len(valid_losses) > 2 and min(valid_losses[-2:]) > best_valid_loss:
                 # two epochs without improvement
                 lr /= 5
-                optimizer = make_optimizer()
+                optimizer = optimizer(model.parameters(), lr=lr)
         except KeyboardInterrupt:
             tq.close()
             print('Ctrl+C, saving snapshot')
@@ -382,23 +382,28 @@ CLS_COLORS = [
 CLS_NAMES = ['male', 'sub_male', 'female', 'juv', 'pup']
 
 
-def validation(model: nn.Module, criterion, valid_loader) -> Dict[str, float]:
+def validation(model: nn.Module, criterion, valid_loader,
+               is_classification=False) -> Dict[str, float]:
     model.eval()
     losses = []
-    all_outputs, all_targets = [], []
+    all_targets, all_outputs = [], []
     for inputs, targets in valid_loader:
         inputs, targets = variable(inputs, volatile=True), variable(targets)
         outputs = model(inputs)
         loss = criterion(outputs, targets)
         losses.append(loss.data[0])
-        all_targets.extend(targets.data.cpu().numpy())
-        all_outputs.extend(outputs.data.cpu().numpy().argmax(axis=1))
+        if is_classification:
+            all_targets.extend(targets.data.cpu().numpy())
+            all_outputs.extend(outputs.data.cpu().numpy().argmax(axis=1))
     valid_loss = np.mean(losses)  # type: float
+    metrics = {'valid_loss': valid_loss}
     print('Valid loss: {:.5f}'.format(valid_loss))
-    from sklearn.metrics import classification_report, accuracy_score
-    print('Accuracy: {:.3f}'.format(accuracy_score(all_targets, all_outputs)))
-    print(classification_report(all_targets, all_outputs))
-    return {'valid_loss': valid_loss}
+    if is_classification:
+        accuracy = accuracy_score(all_targets, all_outputs)
+        print('Accuracy: {:.3f}'.format(accuracy))
+        print(classification_report(all_targets, all_outputs))
+        metrics['accuracy'] = accuracy
+    return metrics
 
 
 def load_best_model(model: nn.Module, root: Path, model_path=None) -> None:
