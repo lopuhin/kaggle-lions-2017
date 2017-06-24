@@ -227,17 +227,9 @@ def round_prediction(pred: np.ndarray) -> np.ndarray:
     return pred.round().astype(np.int32)
 
 
-def input_features(xs, deltafeat=False):
+def input_features(xs):
     xs = xs[:, tuple(ALL_FEATURE_NAMES.index(f) for f in FEATURE_NAMES)]
     assert xs.shape[1] == len(FEATURE_NAMES)
-    if deltafeat:
-        i = FEATURE_NAMES.index
-        xs[:, i('sum')] -= (
-            xs[:, i('sum-0.04')] + xs[:, i('sum-0.08')] + xs[:, i('sum-0.24')])
-        xs[:, i('sum-0.04')] -= xs[:, i('sum-0.08')] + xs[:, i('sum-0.24')]
-        xs[:, i('sum-0.08')] -= xs[:, i('sum-0.24')]
-        xs[:, i('blob-0.04')] -= xs[:, i('blob-0.08')]
-        xs[:, i('blob-0.04-sum')] -= xs[:, i('blob-0.08-sum')]
     return xs
 
 
