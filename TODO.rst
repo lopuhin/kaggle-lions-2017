@@ -1,27 +1,23 @@
 TODO:
 
-Try 192 patch
-Larger markers for cls 0 an 1 (12 and 10?)
-Try more conv layers in UNet
-
 ws:
 - predict 192 patch (now)
+- continue training AWS model, turn off AWS
 - more hyperparameter tuning
 - train & predict another fold with current best settings
 
 1080:
-- predict test on 0.55
+- predict 192 patch (now)
+- predict test on 0.55?
 
+
+Try 192 patch
+Larger markers for cls 0 an 1 (12 and 10?)
+Try more conv layers in UNet
 
 Try to reduce scale augmentation during training? say 0.8 -- 1.25 - bad?
 Try slightly different test scale (0.55?)
 Try to train on 1.5x and predict on 0.75x?
-
-Training in 16 GB:
-- cache=False
-- load just ~100 in memory and re-load them from time to time
-  what about workers? make epochs really short? or load from disk?
-- don't load validation set in memory
 
 make_submission:
 - try a second level model that accepts class predictions
@@ -31,10 +27,10 @@ make_submission:
   - multiply by some constant, validate on the LB?
 
 Last submission:
+Maybe have at least one blobs submission
 Try to average predictions from several models
 More overlap on UNet prediction: could make sense
 Train/predict different folds
-
 
 Crazy:
 Try predicting scale
