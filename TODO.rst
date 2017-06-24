@@ -4,9 +4,14 @@ Try 192 patch
 Larger markers for cls 0 an 1 (12 and 10?)
 Try more conv layers in UNet
 
+ws:
+- predict 192 patch (now)
+- more hyperparameter tuning
+- train & predict another fold with current best settings
+
 1080:
-- predict 192 patch
-- train & predict another fold with current best settings?
+- predict test on 0.55
+
 
 Try to reduce scale augmentation during training? say 0.8 -- 1.25 - bad?
 Try slightly different test scale (0.55?)
@@ -19,8 +24,6 @@ Training in 16 GB:
 - don't load validation set in memory
 
 make_submission:
-- try predicting with old features (substracting sums)
-- try concat again
 - try a second level model that accepts class predictions
 - do something different for each class?
   - use different features
