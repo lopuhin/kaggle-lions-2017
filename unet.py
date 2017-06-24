@@ -176,14 +176,16 @@ def main():
     arg('--mode', choices=[
         'train', 'valid', 'predict_valid', 'predict_test', 'predict_all_valid'],
         default='train')
-    arg('--valid-model', help='path to model file to use for validation')
+    arg('--model-path',
+        help='path to model file to use for validation/prediction')
     arg('--clean', action='store_true')
     arg('--epoch-size', type=int)
     arg('--limit', type=int, help='Use only N images for train/valid')
     arg('--min-scale', type=float, default=1)
     arg('--max-scale', type=float, default=1)
     arg('--test-scale', type=float, default=0.5)
-    arg('--oversample', type=float, default=0.0, help='sample near lion with given p')
+    arg('--oversample', type=float, default=0.0,
+        help='sample near lion with given probability')
     arg('--with-head', action='store_true')
     args = parser.parse_args()
 
@@ -214,18 +216,14 @@ def main():
                     train_loader=train_loader, valid_loader=valid_loader,
                     save_predictions=save_predictions)
     elif args.mode == 'valid':
-        if args.valid_model:
-            model.load_state_dict(torch.load(args.valid_model)['model'])
-            print('Loaded model {}'.format(args.valid_model))
-        else:
-            utils.load_best_model(model, root)
+        utils.load_best_model(model, root, args.model_path)
         valid_loader = utils.make_loader(
             SegmentationDataset, args, valid_paths, coords,
             deterministic=True, **loader_kwargs)
         utils.validation(model, criterion,
                          tqdm.tqdm(valid_loader, desc='Validation'))
     else:
-        utils.load_best_model(model, root)
+        utils.load_best_model(model, root, args.model_path)
         if args.mode in {'predict_valid', 'predict_all_valid'}:
             if args.mode == 'predict_all_valid':
                 # include all paths we did not train on (makes sense only with --limit)

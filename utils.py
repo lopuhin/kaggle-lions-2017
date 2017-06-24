@@ -393,8 +393,9 @@ def validation(model: nn.Module, criterion, valid_loader) -> Dict[str, float]:
     return {'valid_loss': valid_loss}
 
 
-def load_best_model(model: nn.Module, root: Path) -> None:
-    state = torch.load(str(root / 'best-model.pt'))
+def load_best_model(model: nn.Module, root: Path, model_path=None) -> None:
+    model_path = model_path or str(root / 'best-model.pt')
+    state = torch.load(model_path)
     model.load_state_dict(state['model'])
     print('Loaded model from epoch {epoch}, step {step:,}'.format(**state))
 

@@ -12,6 +12,11 @@ Try to reduce scale augmentation during training? say 0.8 -- 1.25 - bad?
 Try slightly different test scale (0.55?)
 Try to train on 1.5x and predict on 0.75x?
 
+Training in 16 GB:
+- cache=False
+- load just ~100 in memory and re-load them from time to time
+  what about workers? make epochs really short? or load from disk?
+- don't load validation set in memory
 
 make_submission:
 - try predicting with old features (substracting sums)
