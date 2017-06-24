@@ -187,6 +187,7 @@ def main():
     arg('--oversample', type=float, default=0.0,
         help='sample near lion with given probability')
     arg('--with-head', action='store_true')
+    arg('--pred-oddity', type=int, help='set to 0/1 to predict even/odd images')
     args = parser.parse_args()
 
     coords = utils.load_coords()
@@ -239,6 +240,10 @@ def main():
             predicted = {p.stem.split('-')[0] for p in out_path.glob('*.npy')}
             test_paths = [p for p in utils.DATA_ROOT.joinpath('Test').glob('*.jpg')
                           if p.stem not in predicted]
+            if args.pred_oddity is not None:
+                assert args.pred_oddity in {0, 1}
+                test_paths = [p for p in test_paths
+                              if int(p.stem) % 2 == args.pred_oddity]
             predict(model, test_paths, out_path,
                     patch_size=args.patch_size, batch_size=args.batch_size,
                     test_scale=args.test_scale,
