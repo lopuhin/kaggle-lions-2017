@@ -1,23 +1,27 @@
 TODO:
 
 ws:
-- predict 192 patch (now)
-- continue training AWS model, turn off AWS
+- continue training AWS model,
 $ ./unet.py runs/unet-stratified-scale-0.8-1.6-oversample0.2-fold2 --stratified --fold 2 --min-scale 0.8 --max-scale 1.6 --oversample 0.2 --workers 0
 - more hyperparameter tuning
-- train & predict another fold with current best settings
 
 1080:
-- predict 192 patch (now)
-- predict test on 0.55?
+- predict test on 0.55 (now)
 
 AWS:
 - remove volumes and AMI
 
+classification:
+- add scale augmentation (0.8 -- 1.25 for a start)
+- vary patch size
+- add to make_submission!
+- better fine-tuning: smaller lr for lower layers
+  (https://discuss.pytorch.org/t/how-to-perform-finetuning-in-pytorch/419/8)
 
-Try 192 patch
-Larger markers for cls 0 an 1 (12 and 10?)
-Try more conv layers in UNet
+UNet:
+- Try 192 patch
+- Larger markers for cls 0 an 1 (12 and 10?)
+- Try more conv layers in UNet
 
 Try to reduce scale augmentation during training? say 0.8 -- 1.25 - bad?
 Try slightly different test scale (0.55?)

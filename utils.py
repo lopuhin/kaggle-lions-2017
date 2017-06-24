@@ -463,7 +463,7 @@ def plot(*args, ymin=None, ymax=None, xmin=None, xmax=None, params=False,
         xlim_kw['xmax'] = xmax
     if xlim_kw:
         plt.xlim(**xlim_kw)
-    for path in sorted(paths):
+    for path in paths:
         path = Path(path)
         with json_lines.open(str(path.joinpath('train.log')), broken=True) as f:
             events = list(f)
