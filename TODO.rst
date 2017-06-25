@@ -1,18 +1,18 @@
 submit:
 Sun:
-- moar moar depth (done, copy code!)
-- moar depth with mid-14?
-- average mid-14? or on Mon?
+- moar moar depth (done, good)
+- moar depth with mid-14 (done, ~same)
+- average mid-14
 Mon:
 - fold2
-- average masks
-- features from different masks
-- ?
+- make_submission patch 60
+- average masks?
+- features from different masks?
 - ?
 Tue:
-- ep13 more overlap
-- ep13 average
-- mid-14 average
+- ep13 more overlap?
+- ep13 average???
+- mega average - robust submission
 - ?
 - backup
 
@@ -32,6 +32,8 @@ AWS:
 
 make_submission:
 - average different masks
+- an option to predict without rounding
+- try patch size 60
 - use features from several different masks
 - more features from mask: more thresholds, ???
 - less features from mask
