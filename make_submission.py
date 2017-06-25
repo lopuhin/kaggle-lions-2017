@@ -289,8 +289,11 @@ def main():
         data = load_all_features(args.root, only_valid=True, args=args)
         train(data,
               ExtraTreesRegressor(
-                  n_estimators=200, max_depth=4, min_samples_split=10, n_jobs=8,
+                  n_estimators=300, max_depth=5, min_samples_split=10, n_jobs=8,
                   criterion='mse'),
+              ExtraTreesRegressor(
+                  n_estimators=200, max_depth=4, min_samples_split=10, n_jobs=8,
+                  criterion = 'mse'),
               XGBRegressor(n_estimators=200, max_depth=4, nthread=16),
              #Lasso(alpha=1.0, normalize=False, max_iter=100000),
               save_to=model_path,

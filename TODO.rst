@@ -1,7 +1,7 @@
 submit:
 Sun:
-- moar moar depth
-- moar depth with mid-14
+- moar moar depth (done, copy code!)
+- moar depth with mid-14?
 - average mid-14? or on Mon?
 Mon:
 - fold2
@@ -19,9 +19,8 @@ Tue:
 TODO:
 
 ws:
-- continue training AWS model,
-$ ./unet.py runs/unet-stratified-scale-0.8-1.6-oversample0.2-fold2 --stratified --fold 2 --min-scale 0.8 --max-scale 1.6 --oversample 0.2 --workers 0
-- train with a different scale aug: 0.9 -- 1.4 (start Sun)
+- train fold 3 with a different scale aug: 0.9 -- 1.5 (now)
+- submit fold 2 (Mon)
 
 1080:
 - predict fold2 (ready Monday morning)
@@ -32,8 +31,8 @@ AWS:
 - remove volumes and AMI
 
 make_submission:
-- use features from several different masks
 - average different masks
+- use features from several different masks
 - more features from mask: more thresholds, ???
 - less features from mask
 
