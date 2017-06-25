@@ -6,7 +6,7 @@ $ ./unet.py runs/unet-stratified-scale-0.8-1.6-oversample0.2-fold2 --stratified 
 - more hyperparameter tuning
 
 1080:
-- predict test on 0.55 (now)
+- predict fold2
 
 AWS:
 - remove volumes and AMI
@@ -14,18 +14,12 @@ AWS:
 classification:
 - add scale augmentation (0.8 -- 1.25 for a start)
 - vary patch size
-- add to make_submission!
-- better fine-tuning: smaller lr for lower layers
-  (https://discuss.pytorch.org/t/how-to-perform-finetuning-in-pytorch/419/8)
 
 UNet:
-- Try 192 patch
 - Larger markers for cls 0 an 1 (12 and 10?)
 - Try more conv layers in UNet
 
 Try to reduce scale augmentation during training? say 0.8 -- 1.25 - bad?
-Try slightly different test scale (0.55?)
-Try to train on 1.5x and predict on 0.75x?
 
 make_submission:
 - try a second level model that accepts class predictions
@@ -38,7 +32,6 @@ Last submission:
 Maybe have at least one blobs submission
 Try to average predictions from several models
 More overlap on UNet prediction: could make sense
-Train/predict different folds
 
 Crazy:
 Try predicting scale
