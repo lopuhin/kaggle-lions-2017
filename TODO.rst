@@ -1,8 +1,8 @@
 submit:
 Sun:
+- moar moar depth
 - moar depth with mid-14
 - average mid-14? or on Mon?
-- moar moar depth
 Mon:
 - fold2
 - average masks
@@ -21,10 +21,11 @@ TODO:
 ws:
 - continue training AWS model,
 $ ./unet.py runs/unet-stratified-scale-0.8-1.6-oversample0.2-fold2 --stratified --fold 2 --min-scale 0.8 --max-scale 1.6 --oversample 0.2 --workers 0
-- train with a different scale aug: 0.9 -- 1.4 (Sun)
+- train with a different scale aug: 0.9 -- 1.4 (start Sun)
 
 1080:
 - predict fold2 (ready Monday morning)
+- predict new aug (ready Tue morning???)
 - predict ep13 masks with more overlap (ready mid-Tue)
 
 AWS:
@@ -33,6 +34,8 @@ AWS:
 make_submission:
 - use features from several different masks
 - average different masks
+- more features from mask: more thresholds, ???
+- less features from mask
 
 classification:
 - add scale augmentation (0.8 -- 1.25 for a start)
