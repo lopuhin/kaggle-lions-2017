@@ -114,6 +114,14 @@ def load_all_features(root: Path, only_valid: bool, args) -> Dict[str, np.ndarra
     if not args.new_features and features_path.exists():
         print('Loading features...')
         data = dict(np.load(str(features_path)))
+        clf_features_path = root.joinpath('clf_features.npz')
+        if clf_features_path.exists():
+            clf_features = np.load(str(clf_features_path))['xs']
+            data['xs'] = np.concatenate([data['xs'], clf_features], axis=2)
+            for i in range(clf_features.shape[2]):
+                feature_name = 'clf-{}'.format(i)
+                ALL_FEATURE_NAMES.append(feature_name)
+                FEATURE_NAMES.append(feature_name)
         print('done.')
         ids = [get_id(p) for p in pred_paths]
         assert set(ids) == set(data['ids'][0])

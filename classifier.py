@@ -185,7 +185,7 @@ def predict(model, img_paths: List[Path], out_path: Path,
 
     clf_features = np.array(clf_features)
     with out_path.joinpath('clf_features.npz').open('wb') as f:
-        np.savez(f, {'xs': clf_features})
+        np.savez(f, xs=clf_features)
 
 
 def _load_image(path, is_test, test_scale, min_scale, max_scale):
