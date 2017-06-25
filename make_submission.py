@@ -132,9 +132,8 @@ def load_all_features(root: Path, only_valid: bool, args) -> Dict[str, np.ndarra
                 data['scales'][cls].extend([scale] * len(ys[cls]))
                 data['xs'][cls].extend(xs[cls])
                 data['ys'][cls].extend(ys[cls])
-                if cls != 4:
-                    blob_data['blobs'][cls].append((id, blobs[cls]))
-                    blob_data['blob_ids'][cls].extend(blob_ids[cls])
+                blob_data['blobs'][cls].append((id, scale, blobs[cls]))
+                blob_data['blob_ids'][cls].extend(blob_ids[cls])
     data = {k: np.array(v, dtype=np.int32 if k in {'ids', 'ys'} else np.float32)
             for k, v in data.items()}
     with features_path.open('wb') as f:
