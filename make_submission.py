@@ -3,6 +3,7 @@ import argparse
 from functools import partial
 import multiprocessing.pool
 from pathlib import Path
+import pickle
 from typing import Tuple, List, Dict
 
 import eli5
@@ -37,8 +38,8 @@ FEATURE_NAMES = ['sum', 'sum-0.04', 'sum-0.08', 'sum-0.24']
 FEATURE_NAMES += ['blob-0.04', 'blob-0.04-sum', 'blob-0.08', 'blob-0.08-sum']
 
 
-def load_xs_ys(pred_path: Path, coords: pd.DataFrame
-               ) -> Tuple[int, float, np.ndarray, np.ndarray]:
+def load_xs_ys(pred_path: Path, coords: pd.DataFrame,
+               ) -> Tuple[int, float, np.ndarray, np.ndarray, List, List]:
     pred = utils.load_pred(pred_path)
     path_parts = pred_path.name.split('-')[:-1]
     if len(path_parts) == 2:
@@ -49,6 +50,7 @@ def load_xs_ys(pred_path: Path, coords: pd.DataFrame
     img_id, img_scale = int(img_id), float(img_scale)
     scale = PRED_SCALE / img_scale
     all_features, all_targets = [], []
+    all_cls_blobs, all_blob_ids = [], []
     for cls in range(utils.N_CLASSES):
         cls_features, cls_targets = [], []
         all_features.append(cls_features)
@@ -65,6 +67,9 @@ def load_xs_ys(pred_path: Path, coords: pd.DataFrame
                       for y, x, _ in blob_log(cls_pred, threshold=blob_threshold,
                                               min_sigma=1, max_sigma=4, num_sigma=4)]
                      for blob_threshold in BLOB_THRESHOLDS]
+        all_cls_blobs.append(cls_blobs)
+        cls_blob_ids = []
+        all_blob_ids.append(cls_blob_ids)
         max_y, max_x = cls_pred.shape
         step = PATCH_SIZE // STEP_RATIO
         steps = lambda m: range(-PATCH_SIZE + step, m + PATCH_SIZE - step, step)
@@ -79,19 +84,21 @@ def load_xs_ys(pred_path: Path, coords: pd.DataFrame
                 cls_features.append(features)
                 for i, threshold in enumerate(SUM_THRESHOLDS):
                     bin_mask = patch > threshold
-                   #if i + 1 < len(SUM_THRESHOLDS):
-                   #    bin_mask &= patch < SUM_THRESHOLDS[i + 1]
                     features.append(bin_mask.sum())
                 target = sum(x0 <= x < x1 and y0 <= y < y1 for x, y in cls_coords)
                 cls_targets.append(target)
-                for th_blobs in cls_blobs:
+                blob_ids = []
+                for i, th_blobs in enumerate(cls_blobs):
+                    blob_ids.append(i)
                     blob_count = blob_sum = 0
                     for x, y, value in th_blobs:
                         if x0 <= x < x1 and y0 <= y < y1:
                             blob_count += 1
                             blob_sum += value
                     features.extend([blob_count, blob_sum])
-    return img_id, img_scale, np.array(all_features), np.array(all_targets)
+                cls_blob_ids.append(blob_ids)
+    return (img_id, img_scale, np.array(all_features), np.array(all_targets),
+            all_cls_blobs, all_blob_ids)
 
 
 def load_all_features(root: Path, only_valid: bool, args) -> Dict[str, np.ndarray]:
@@ -114,8 +121,10 @@ def load_all_features(root: Path, only_valid: bool, args) -> Dict[str, np.ndarra
     print('{} total'.format(len(pred_paths)))
     data = {k: [[] for _ in range(utils.N_CLASSES)]
             for k in ['ids', 'scales', 'xs', 'ys']}
+    blob_data = {k: [[] for _ in range(utils.N_CLASSES)]
+                 for k in ['blobs', 'blob_ids']}
     with multiprocessing.pool.Pool(processes=24) as pool:
-        for id, scale, xs, ys in tqdm.tqdm(
+        for id, scale, xs, ys, blobs, blob_ids in tqdm.tqdm(
                 pool.imap(partial(load_xs_ys, coords=coords), pred_paths, chunksize=2),
                 total=len(pred_paths)):
             for cls in range(utils.N_CLASSES):
@@ -123,10 +132,15 @@ def load_all_features(root: Path, only_valid: bool, args) -> Dict[str, np.ndarra
                 data['scales'][cls].extend([scale] * len(ys[cls]))
                 data['xs'][cls].extend(xs[cls])
                 data['ys'][cls].extend(ys[cls])
+                if cls != 4:
+                    blob_data['blobs'][cls].append((id, blobs[cls]))
+                    blob_data['blob_ids'][cls].extend(blob_ids[cls])
     data = {k: np.array(v, dtype=np.int32 if k in {'ids', 'ys'} else np.float32)
             for k, v in data.items()}
     with features_path.open('wb') as f:
         np.savez(f, **data)
+    with root.joinpath('blobs.pkl').open('wb') as f:
+        pickle.dump(blob_data, f)
     return data
 
 

@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
 import argparse
+from collections import defaultdict
 import json
-from functools import partial
 from pathlib import Path
+import pickle
 import random
 import shutil
 from typing import List
+
+from make_submission import PRED_SCALE, BLOB_THRESHOLDS
 
 import cv2
 import pandas as pd
@@ -140,6 +143,15 @@ def predict(model, img_paths: List[Path], out_path: Path,
             ):
     model.eval()
 
+    with out_path.joinpath('blobs.pkl').open('rb') as f:
+        blobs_data = pickle.load(f)
+    blobs_by_id = defaultdict(list)
+    for cls_blobs in blobs_data['blobs'][:-1]:  # skip pups
+        for id, blobs in cls_blobs:
+            # TODO - handle ids too
+            assert len(blobs) == len(BLOB_THRESHOLDS)
+            blobs_by_id[id].extend(blobs[0])  # take lowest threshold
+
     def load_image(path):
         if is_test:
             scale = test_scale
@@ -157,37 +169,40 @@ def predict(model, img_paths: List[Path], out_path: Path,
         return (path, scale), img
 
     def predict(arg):
-        img_meta, img = arg
+        (path, scale), img = arg
         h, w = img.shape[:2]
-        s = patch_size
-        # TODO - get all_xy from blobs
-        assert False
-        all_xy = [(x, y) for x in xs for y in ys]
+        s = patch_size // 2
+        blobs = blobs_by_id.get(int(path.stem))
+        if not blobs:
+            return (path, scale), None
+        all_xy = [(int(round(x * PRED_SCALE)),
+                   int(round(y * PRED_SCALE))) for x, y, _ in blobs]
 
         def make_batch(xy_batch_):
             return (xy_batch_, torch.stack([
-                utils.img_transform(img[y: y + s, x: x + s]) for x, y in xy_batch_]))
+                utils.img_transform(img[y - s: y + s, x - s: x + s])
+                for x, y in xy_batch_]))
 
         for xy_batch, inputs in utils.imap_fixed_output_buffer(
                 make_batch, tqdm.tqdm(list(utils.batches(all_xy, batch_size))),
                 threads=1):
             outputs = model(utils.variable(inputs, volatile=True))
+            import IPython; IPython.embed()
             # TODO - apply softmax
             outputs_data = np.exp(outputs.data.cpu().numpy())
             # TODO - collect predictions
-        return img_meta, pred_img
+        return (path, scale), pred_img
 
-    loaded = utils.imap_fixed_output_buffer(
-        load_image, tqdm.tqdm(img_paths), threads=4)
-
-    for x in utils.imap_fixed_output_buffer(predict, loaded, threads=1):
-        assert False  # TODO
+    for arg in utils.imap_fixed_output_buffer(
+            load_image, tqdm.tqdm(img_paths), threads=4):
+        predict(arg)
 
 
 def main():
     parser = argparse.ArgumentParser()
     arg = parser.add_argument
     arg('root', help='checkpoint root')
+    arg('out_path', help='path to UNet features', type=Path)
     arg('--batch-size', type=int, default=32)
     arg('--patch-size', type=int, default=160)
     arg('--offset', type=int, default=6)
@@ -255,10 +270,11 @@ def main():
                 # include all paths we did not train on (makes sense only with --limit)
                 valid_paths = list(
                     set(valid_paths) | (set(utils.labeled_paths()) - set(train_paths)))
-            predict(model, valid_paths, out_path=root,
+            predict(model, valid_paths, out_path=args.out_path,
                     patch_size=args.patch_size, batch_size=args.batch_size,
                     min_scale=args.min_scale, max_scale=args.max_scale)
         elif args.mode == 'predict_test':
+            assert False  # FIXME - use out_path too
             out_path = root.joinpath('test')
             out_path.mkdir(exist_ok=True)
             predicted = {p.stem.split('-')[0] for p in out_path.glob('*.npy')}
