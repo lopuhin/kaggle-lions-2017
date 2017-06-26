@@ -2,10 +2,10 @@ submit:
 Sun:
 - moar moar depth (done, good)
 - moar depth with mid-14 (done, ~same)
-- average mid-14
+- average mid-14 (done, ~ok)
 Mon:
+- make_submission patch 60 (done, good)
 - fold2
-- make_submission patch 60
 - average masks?
 - features from different masks?
 - ?
