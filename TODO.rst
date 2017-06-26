@@ -19,13 +19,14 @@ Tue:
 TODO:
 
 ws:
-- train fold 3 with a different scale aug: 0.9 -- 1.5 (now)
-- submit fold 2 (Mon)
+- predict ep13 masks with more overlap (now)
+- predict new aug
+  ./unet.py runs/unet-stratified-scale-0.9-1.5-oversample0.3-fold3 --stratified --fold 3 --min-scale 0.9 --max-scale 1.5 --oversample 0.3 --lr 0.00002
 
 1080:
-- predict fold2 (ready Monday morning)
-- predict new aug (ready Tue morning???)
-- predict ep13 masks with more overlap (ready mid-Tue)
+- predict ep13 masks with more overlap (now)
+- predict new aug
+  ./unet.py runs/unet-stratified-scale-0.9-1.5-oversample0.3-fold3 --stratified --fold 3 --min-scale 0.9 --max-scale 1.5 --oversample 0.3 --lr 0.00002
 
 AWS:
 - remove volumes and AMI
