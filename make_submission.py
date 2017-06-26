@@ -26,7 +26,7 @@ import utils
 
 STEP_RATIO = 2
 PRED_SCALE = 4
-PATCH_SIZE = 80
+PATCH_SIZE = 60
 SUM_THRESHOLDS = [0.02, 0.04, 0.08, 0.16, 0.24, 0.32, 0.5]
 BLOB_THRESHOLDS = [0.02, 0.04, 0.08, 0.16, 0.24, 0.5]
 SUM_FEATURES = ['sum'] + ['sum-{:.2}'.format(th) for th in SUM_THRESHOLDS]
