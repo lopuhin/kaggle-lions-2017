@@ -5,15 +5,14 @@ Sun:
 - average mid-14 (done, ~ok)
 Mon:
 - make_submission patch 60 (done, good)
-- fold2
-- average masks?
-- features from different masks?
-- ?
+- fold2 (done, bad)
+- less features (done, not great)
+- more features (done, not great)
 Tue:
-- ep13 more overlap?
-- ep13 average???
+- ep13 more overlap
+- fold3
+- try geometric average? or?
 - mega average - robust submission
-- ?
 - backup
 
 TODO:
@@ -34,10 +33,7 @@ AWS:
 make_submission:
 - average different masks
 - an option to predict without rounding
-- try patch size 60
 - use features from several different masks
-- more features from mask: more thresholds, ???
-- less features from mask
 
 classification:
 - add scale augmentation (0.8 -- 1.25 for a start)
