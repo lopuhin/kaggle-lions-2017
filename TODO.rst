@@ -10,22 +10,12 @@ Mon:
 - more features (done, not great)
 Tue:
 - ep13 more overlap (done, bad!)
-- fold3
-- try mask geometric average? or lasso?
-- low 14 average - robust submission
-- mid-13 average
+- fold3 (done, bad)
+- mid-13 average (done)
+- low 14 average - robust submission (done)
+- try mask geometric average? or lasso? (done, bad)
 
 TODO:
-
-ws:
-- predict ep13 masks with more overlap
-- predict new aug (now)
-  ./unet.py runs/unet-stratified-scale-0.9-1.5-oversample0.3-fold3 --stratified --fold 3 --min-scale 0.9 --max-scale 1.5 --oversample 0.3 --lr 0.00002
-
-1080:
-- predict ep13 masks with more overlap
-- predict new aug (now)
-  ./unet.py runs/unet-stratified-scale-0.9-1.5-oversample0.3-fold3 --stratified --fold 3 --min-scale 0.9 --max-scale 1.5 --oversample 0.3 --lr 0.00002
 
 make_submission:
 - average different masks
