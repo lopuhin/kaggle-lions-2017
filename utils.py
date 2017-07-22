@@ -295,12 +295,14 @@ def train(args, model: nn.Module, criterion, *, train_loader, valid_loader,
         step = 0
         best_valid_loss = float('inf')
 
-    save = lambda ep: torch.save({
-        'model': model.state_dict(),
-        'epoch': ep,
-        'step': step,
-        'best_valid_loss': best_valid_loss
-    }, str(model_path))
+    def save(ep: int):
+        torch.save(
+            {'model': model.state_dict(),
+             'epoch': ep,
+             'step': step,
+             'best_valid_loss': best_valid_loss,
+             }, str(model_path))
+        shutil.copy(str(model_path), str(root / 'model-{}.pt'.format(ep)))
 
     report_each = 10
     save_prediction_each = report_each * 10
