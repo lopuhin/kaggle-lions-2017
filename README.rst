@@ -4,28 +4,80 @@ NOAA Fisheries Steller Sea Lion Population Count
 `Kaggle <https://www.kaggle.com/c/noaa-fisheries-steller-sea-lion-population-count>`_
 
 
+Installation
+------------
+
+Install required packages (Ubuntu 16.04 or above, CUDA is assumed
+to be already installed)::
+
+    sudo apt install \
+        gcc make  python3-venv python3-pip python3-tk libgeos-dev
+
+Make a virtual environment and install python packages::
+
+    python3.5 -m venv venv
+    . venv/bin/activate
+    pip install -U pip wheel
+    pip install -r requirements.txt
+
+Download training and testing data (``Test``, ``Train``, ``TrainDotted``)
+and place it in ``./data`` folder so it looks like this::
+
+    data
+    ├── coords-threeplusone-v0.4.csv
+    ├── MismatchedTrainImages.txt
+    ├── sample_submission.csv
+    ├── Test
+    ├── Train
+    └── TrainDotted
+
+
 Training and making a submission
 --------------------------------
 
-Train UNet::
+Make a directory ``_runs``::
 
-    ./unet.py runs/unet-limit500 --limit 500
+    mkdir _runs
+
+Train UNet (this takes about 20 hours and needs 8GB of GPU memory)::
+
+    ./unet.py _runs/unet-stratified-scale-0.8-1.6-oversample0.2 \
+        --stratified \
+        --batch-size 32 \
+        --min-scale 0.8 --max-scale 1.6 \
+        --n-epochs 20 \
+        --oversample 0.2
+
+./unet.py _runs/unet-stratified-scale-0.8-1.6-oversample0.2 --batch-size 32 --min-scale 0.8 --max-scale 1.6 --n-epochs 20 --oversample 0.2 --mode predict_test --model-path _runs/unet-stratified-scale-0.8-1.6-oversample0.2/model-13.pt
 
 Make predictions for validation set (and all other images not used due to ``--limit``,
 if ``--predict_all_valid`` option is used instead of ``--predict_valid``, like below),
-also don't forget to pass all the other params from training::
+also don't forget to pass all the other params from training
+(this should take less than an hour)::
 
-    ./unet.py runs/unet-limit500 --limit 500 --mode predict_all_valid
+    ./unet.py _runs/unet-stratified-scale-0.8-1.6-oversample0.2 \
+        --stratified \
+        --batch-size 32 \
+        --min-scale 0.8 --max-scale 1.6 \
+        --n-epochs 20 --oversample 0.2 \
+        --mode predict_all_valid
 
-Train a regression model on this predictions::
+Train a regression model on this predictions (takes less than 10 minutes)::
 
-    ./make_submission.py runs/unet-limit500 train
+    ./make_submission.py _runs/unet-stratified-scale-0.8-1.6-oversample0.2 train
 
-Now you need to predict all test (that takes a lot of time)::
+Now you need to predict all test (this takes about 12 hours)::
 
-    ./unet.py runs/unet-limit500 --limit 500 --mode predict_test
+    ./unet.py _runs/unet-stratified-scale-0.8-1.6-oversample0.2 \
+        --stratified \
+        --batch-size 32 \
+        --min-scale 0.8 --max-scale 1.6 \
+        --n-epochs 20 --oversample 0.2 \
+        --mode predict_test
 
-Now make submission with::
+Now make submission with (takes a few hours)::
 
-    ./make_submission.py runs/unet-limit500 predict
+    ./make_submission.py _runs/unet-stratified-scale-0.8-1.6-oversample0.2 predict
 
+Submission file will be in
+``_runs/unet-stratified-scale-0.8-1.6-oversample0.2/unet-stratified-scale-0.8-1.6-oversample0.2.csv``
