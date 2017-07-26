@@ -11,13 +11,22 @@ Install required packages (Ubuntu 16.04 or above, CUDA is assumed
 to be already installed)::
 
     sudo apt install \
-        gcc make  python3-venv python3-pip python3-tk libgeos-dev
+        gcc make python3-venv python3-pip python3-tk libgeos-dev
 
 Make a virtual environment and install python packages::
 
     python3.5 -m venv venv
     . venv/bin/activate
     pip install -U pip wheel
+
+Install pytorch ``0.1.12.post2``: go to http://pytorch.org, select the version
+according to your CUDA and python version, and install it. For example,
+for CUDA 8.0 on Python 3.5 and Ubuntu, the command would be::
+
+    pip install http://download.pytorch.org/whl/cu80/torch-0.1.12.post2-cp35-cp35m-linux_x86_64.whl
+
+Install the rest of python packages::
+
     pip install -r requirements.txt
 
 Download training and testing data (``Test``, ``Train``, ``TrainDotted``)
@@ -48,7 +57,9 @@ Train UNet (this takes about 20 hours and needs 8GB of GPU memory)::
         --n-epochs 20 \
         --oversample 0.2
 
-./unet.py _runs/unet-stratified-scale-0.8-1.6-oversample0.2 --batch-size 32 --min-scale 0.8 --max-scale 1.6 --n-epochs 20 --oversample 0.2 --mode predict_test --model-path _runs/unet-stratified-scale-0.8-1.6-oversample0.2/model-13.pt
+**Note:** it may be that 8 GB is slightly not enough and the code may crash
+due to GPU memory error after running for one epoch. In this case, run training
+in a bash loop (the model is saved and restored successfully).
 
 Make predictions for validation set (and all other images not used due to ``--limit``,
 if ``--predict_all_valid`` option is used instead of ``--predict_valid``, like below),
