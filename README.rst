@@ -61,6 +61,9 @@ Train UNet (this takes about 20 hours and needs 8GB of GPU memory)::
 due to GPU memory error after running for one epoch. In this case, run training
 in a bash loop (the model is saved and restored successfully).
 
+Result of this step (``best-model.pt``) is provided at
+``models/unet-stratified-scale-0.8-1.6-oversample0.2/`` in the archive.
+
 Make predictions for validation set (and all other images not used due to ``--limit``,
 if ``--predict_all_valid`` option is used instead of ``--predict_valid``, like below),
 also don't forget to pass all the other params from training
@@ -76,6 +79,9 @@ also don't forget to pass all the other params from training
 Train a regression model on this predictions (takes less than 10 minutes)::
 
     ./make_submission.py _runs/unet-stratified-scale-0.8-1.6-oversample0.2 train
+
+Result of this step (``regressor.joblib``) is provided at
+``models/unet-stratified-scale-0.8-1.6-oversample0.2/`` in the archive.
 
 Now you need to predict all test (this takes about 12 hours)::
 
