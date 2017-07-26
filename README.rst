@@ -11,7 +11,7 @@ Install required packages (Ubuntu 16.04 or above, CUDA is assumed
 to be already installed)::
 
     sudo apt install \
-        gcc make python3-venv python3-pip python3-tk libgeos-dev
+        gcc make python3-venv python3-pip python3-dev python3-tk libgeos-dev
 
 Make a virtual environment and install python packages::
 
