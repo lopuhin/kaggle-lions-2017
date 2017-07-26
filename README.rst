@@ -54,7 +54,7 @@ Train UNet (this takes about 20 hours and needs 8GB of GPU memory)::
         --stratified \
         --batch-size 32 \
         --min-scale 0.8 --max-scale 1.6 \
-        --n-epochs 20 \
+        --n-epochs 13 \
         --oversample 0.2
 
 **Note:** it may be that 8 GB is slightly not enough and the code may crash
@@ -73,7 +73,7 @@ also don't forget to pass all the other params from training
         --stratified \
         --batch-size 32 \
         --min-scale 0.8 --max-scale 1.6 \
-        --n-epochs 20 --oversample 0.2 \
+        --n-epochs 13 --oversample 0.2 \
         --mode predict_all_valid
 
 Train a regression model on this predictions (takes less than 10 minutes)::
@@ -89,7 +89,7 @@ Now you need to predict all test (this takes about 12 hours)::
         --stratified \
         --batch-size 32 \
         --min-scale 0.8 --max-scale 1.6 \
-        --n-epochs 20 --oversample 0.2 \
+        --n-epochs 13 --oversample 0.2 \
         --mode predict_test
 
 Now make submission with (takes a few hours)::
