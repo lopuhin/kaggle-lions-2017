@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import argparse
+from collections import defaultdict
 from functools import partial
 import multiprocessing.pool
 from pathlib import Path
@@ -166,6 +167,7 @@ def train(data, *regs,
     all_rmse, all_patch_rmse, all_baselines = [], [], []
     regs_name = ', '.join(type(reg).__name__ for reg in regs)
     fitted_regs = []
+    expl_by_cls = defaultdict(list)
     for cls in range(utils.N_CLASSES):
         ids = data['ids'][cls]
         scales = data['scales'][cls]
@@ -199,9 +201,10 @@ def train(data, *regs,
             fitted_regs.append(fitted)
         if explain:
             for reg in fitted:
+                expl = eli5.explain_weights(reg, feature_names=FEATURE_NAMES)
+                expl_by_cls[cls].append(expl)
                 print(type(reg).__name__, format_as_text(
-                    eli5.explain_weights(reg, feature_names=FEATURE_NAMES),
-                    show=('method', 'targets', 'feature_importances')))
+                    expl, show=('method', 'targets', 'feature_importances')))
     print('{} with {} features: mean patch RMSE {:.3f}, mean image RMSE {:.2f}, '
           'mean baseline RMSE {:.2f}'
           .format(regs_name, ', '.join(FEATURE_NAMES),
@@ -210,6 +213,21 @@ def train(data, *regs,
     if save_to:
         joblib.dump(fitted_regs, save_to)
         print('Saved to', save_to)
+
+    if explain:
+        dfs = []
+        for cls, expls in expl_by_cls.items():
+            for expl in expls:
+                df = eli5.format_as_dataframe(expl)
+                df['cls'] = cls
+                df['estimator'] = expl.estimator.split('(')[0]
+                dfs.append(df)
+        df = pd.concat(dfs)
+        df.reset_index(inplace=True)
+        df['feature'] = df['index']
+        del df['index']
+        df = df[['feature', 'cls', 'estimator', 'std', 'weight']]
+        df.to_csv('feature_importances.csv', index=None)
 
 
 def train_predict(regs, xs, ys, ids):
