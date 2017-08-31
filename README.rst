@@ -1,8 +1,11 @@
 NOAA Fisheries Steller Sea Lion Population Count
 ================================================
 
-`Kaggle <https://www.kaggle.com/c/noaa-fisheries-steller-sea-lion-population-count>`_
+This is a 2nd place solution for
+`Kaggle NOAA Fisheries Steller Sea Lion Population Count <https://www.kaggle.com/c/noaa-fisheries-steller-sea-lion-population-count>`_.
 
+A short overview of the solution on kaggle forums:
+https://www.kaggle.com/c/noaa-fisheries-steller-sea-lion-population-count/discussion/35422
 
 Installation
 ------------
